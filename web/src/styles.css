@@ -400,45 +400,89 @@ p {
   animation: draw 1.4s ease forwards;
 }
 
+.chart-line.muted {
+  stroke: #cbd5f5;
+}
+
+.chart-point {
+  fill: #0ea5e9;
+}
+
+.chart-point.muted {
+  fill: #cbd5f5;
+}
+
 .chart-area {
   fill: rgba(14, 165, 233, 0.15);
   animation: fadeIn 1.2s ease forwards;
 }
 
 .bars {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  height: 180px;
+  display: grid;
+  gap: 16px;
+}
+
+.bars.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.bar-group {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+  justify-items: center;
 }
 
 .bar {
-  flex: 1;
+  width: 100%;
   background: linear-gradient(180deg, #38bdf8, #0ea5e9);
   border-radius: 10px 10px 4px 4px;
   height: var(--h);
+  min-height: 40px;
   transform: scaleY(0.2);
   transform-origin: bottom;
   animation: rise 1.2s ease forwards;
 }
 
+.bar.accent {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+}
+
+.bar-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.bar-value {
+  font-weight: 700;
+  color: #111827;
+}
+
 .rings {
-  display: flex;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
 }
 
 .ring {
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  border: 8px solid rgba(15, 23, 42, 0.08);
-  border-top-color: #0ea5e9;
-  border-right-color: #38bdf8;
+  height: 130px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
   display: grid;
   place-items: center;
-  font-weight: 700;
+  gap: 6px;
   color: #0f172a;
-  animation: spin 2.2s ease infinite;
+  font-weight: 700;
+}
+
+.ring span {
+  font-size: 20px;
+}
+
+.ring small {
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .chart-caption {
@@ -464,15 +508,6 @@ p {
 @keyframes rise {
   to {
     transform: scaleY(1);
-  }
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
   }
 }
 
