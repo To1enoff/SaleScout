@@ -4,14 +4,14 @@ import logo from '../assets/salescout__logo.png';
 const DEFAULT_URL = 'https://kaspi.kz/shop/p/apple-iphone-17-pro-max-256gb-oranzhevyi-145468241/?c=750000000';
 
 const DEFAULT_GROWTH = {
-  salesLiftPercent: 40,
+  salesLiftPercent: 150,
   conversionPercent: 1.8,
   trafficOrganicPercent: 24,
   trafficAdsPercent: 41,
   salesTrend: [12, 16, 21, 27, 32, 36, 40],
   conversionSeries: [32, 46, 61, 78],
   captions: {
-    sales: '+40% продаж за 30 дней после оптимизации цены и позиции',
+    sales: '+150% продаж за 30 дней после оптимизации цены и позиции',
     conversion: 'CR до 1.8% за счёт более привлекательного оффера',
     traffic: 'Рост органики и рекламы после вывода в ТОП‑3',
   },
@@ -49,118 +49,156 @@ function StepHeader({ step }) {
   );
 }
 
-function buildLinePath(values) {
-  if (!Array.isArray(values) || values.length === 0) return '';
-  const max = Math.max(...values);
-  const min = Math.min(...values);
+function buildLinePath(points, width = 720, height = 200) {
+  if (!Array.isArray(points) || points.length === 0) return '';
+  const max = Math.max(...points.map((p) => p.value));
+  const min = Math.min(...points.map((p) => p.value));
   const range = max - min || 1;
-  const step = (360 - 20) / (values.length - 1 || 1);
+  const step = (width - 20) / (points.length - 1 || 1);
 
-  return values
-    .map((value, index) => {
+  return points
+    .map((point, index) => {
       const x = 10 + index * step;
-      const y = 150 - ((value - min) / range) * 120;
+      const y = height - 10 - ((point.value - min) / range) * (height - 40);
       return `${index === 0 ? 'M' : 'L'}${x} ${y}`;
     })
     .join(' ');
 }
 
-function buildPoints(values) {
+function buildPoints(values, width = 720, height = 200) {
   if (!Array.isArray(values) || values.length === 0) return [];
-  const max = Math.max(...values);
-  const min = Math.min(...values);
+  const max = Math.max(...values.map((p) => p.value));
+  const min = Math.min(...values.map((p) => p.value));
   const range = max - min || 1;
-  const step = (360 - 20) / (values.length - 1 || 1);
+  const step = (width - 20) / (values.length - 1 || 1);
 
-  return values.map((value, index) => {
+  return values.map((point, index) => {
     const x = 10 + index * step;
-    const y = 150 - ((value - min) / range) * 120;
-    return { x, y, value };
+    const y = height - 10 - ((point.value - min) / range) * (height - 40);
+    return { x, y, value: point.value, label: point.label };
   });
 }
 
-function interpolateSeries(start, end, points = 7) {
-  if (start === null || end === null || Number.isNaN(start) || Number.isNaN(end)) {
-    return Array.from({ length: points }, (_, index) => 10 + index * 5);
-  }
-  const step = (end - start) / (points - 1 || 1);
-  return Array.from({ length: points }, (_, index) => Math.round(start + step * index));
+function buildDailySeries(baseDaily, growthPercent) {
+  const variance = [0, -2, 1, -1, 3, -2, 4, -1, 2, -3, 1, 0, 2, -2, 3, -1, 1, 0, 2, -2, 3, -1, 0, 2, -2, 1, 0, 2, -1, 3];
+  const afterMultiplier = 1 + growthPercent / 100;
+  const before = variance.map((v, index) => ({
+    label: `День ${index + 1}`,
+    value: Math.max(1, Math.round(baseDaily + v)),
+  }));
+  const after = variance.map((v, index) => ({
+    label: `День ${index + 1}`,
+    value: Math.max(1, Math.round((baseDaily + v) * afterMultiplier)),
+  }));
+  return { before, after };
 }
 
-function GrowthCharts({ profitNow, profitProjected, salesNow, salesProjected, growth }) {
-  const profitBefore = interpolateSeries(profitNow ?? 0, profitNow ?? 0, 7);
-  const profitAfter = interpolateSeries(profitNow ?? 0, profitProjected ?? profitNow ?? 0, 7);
-  const beforePath = buildLinePath(profitBefore);
-  const afterPath = buildLinePath(profitAfter);
-  const beforePoints = buildPoints(profitBefore);
-  const afterPoints = buildPoints(profitAfter);
+function Donut({ percent, label }) {
+  const radius = 42;
+  const stroke = 10;
+  const normalized = Math.min(95, Math.max(10, percent));
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (normalized / 100) * circumference;
+
+  return (
+    <div className="donut-card">
+      <svg width="120" height="120" viewBox="0 0 120 120" className="donut">
+        <circle
+          className="donut-bg"
+          cx="60"
+          cy="60"
+          r={radius}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <circle
+          className="donut-fg"
+          cx="60"
+          cy="60"
+          r={radius}
+          strokeWidth={stroke}
+          fill="none"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="donut-value">{normalized}%</div>
+      <div className="donut-label">{label}</div>
+    </div>
+  );
+}
+
+function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, conversionGrowth }) {
+  const dailyNow = Math.max(1, Math.round((salesNow || 30) / 30));
+  const dailySeries = buildDailySeries(dailyNow, growth);
+  const beforePath = buildLinePath(dailySeries.before);
+  const afterPath = buildLinePath(dailySeries.after);
+  const beforePoints = buildPoints(dailySeries.before);
+  const afterPoints = buildPoints(dailySeries.after);
+
+  const maxSales = Math.max(1, salesProjected || salesNow || 1);
+  const nowBar = salesNow ? Math.max(35, (salesNow / maxSales) * 100) : 35;
+  const afterBar = salesProjected ? Math.max(70, (salesProjected / maxSales) * 100) : 70;
 
   return (
     <div className="charts">
       <div className="chart-card">
-        <div className="chart-title">Рост прибыли: до и после</div>
-        <svg viewBox="0 0 360 160" className="chart">
+        <div className="chart-title">Продажи в день: сейчас и после (30 дней)</div>
+        <svg viewBox="0 0 720 200" className="chart">
           <path className="chart-line muted" d={beforePath} />
           <path className="chart-line" d={afterPath} />
           {beforePoints.map((point, index) => (
             <circle key={`b-${index}`} className="chart-point muted" cx={point.x} cy={point.y} r="4">
-              <title>{formatCurrency(point.value)}</title>
+              <title>
+                {point.label}: {point.value} шт.
+              </title>
             </circle>
           ))}
           {afterPoints.map((point, index) => (
             <circle key={`a-${index}`} className="chart-point" cx={point.x} cy={point.y} r="4">
-              <title>{formatCurrency(point.value)}</title>
+              <title>
+                {point.label}: {point.value} шт.
+              </title>
             </circle>
           ))}
         </svg>
-        <div className="chart-caption">
-          Наведите на точки, чтобы увидеть значения прибыли. Линия «после» — с новой ценой.
-        </div>
+        <div className="chart-caption">Рост продаж составляет 150% после выхода в ТОП‑1.</div>
       </div>
 
       <div className="chart-card">
         <div className="chart-title">Продажи в месяц: сейчас и после</div>
         <div className="bars two">
           <div className="bar-group">
-            <div className="bar" style={{ '--h': '55%' }} />
+            <div className="bar" style={{ '--h': `${nowBar}%` }} />
             <div className="bar-label">Сейчас</div>
             <div className="bar-value">{salesNow ?? '—'}</div>
           </div>
           <div className="bar-group">
-            <div className="bar accent" style={{ '--h': '85%' }} />
+            <div className="bar accent" style={{ '--h': `${afterBar}%` }} />
             <div className="bar-label">После</div>
             <div className="bar-value">{salesProjected ?? '—'}</div>
           </div>
         </div>
-        <div className="chart-caption">Рост продаж не ниже {growth}% при выходе в ТОП‑1.</div>
+        <div className="chart-caption">Разница видна сразу: рост объёма продаж после выхода в ТОП‑1.</div>
       </div>
 
       <div className="chart-card">
-        <div className="chart-title">Баланс влияния</div>
-        <div className="rings">
-          <div className="ring">
-            <span>+{growth}%</span>
-            <small>Продажи</small>
-          </div>
-          <div className="ring">
-            <span>+{Math.max(20, growth - 10)}%</span>
-            <small>Трафик</small>
-          </div>
-          <div className="ring">
-            <span>+{Math.max(12, growth - 22)}%</span>
-            <small>Конверсия</small>
-          </div>
+        <div className="chart-title">Вклад каналов в рост</div>
+        <div className="donuts">
+          <Donut percent={growth} label="Продажи" />
+          <Donut percent={trafficGrowth} label="Трафик" />
+          <Donut percent={conversionGrowth} label="Конверсия" />
         </div>
-        <div className="chart-caption">Сбалансированный рост: продажи, трафик и конверсия.</div>
+        <div className="chart-caption">Реалистичное распределение влияния на рост.</div>
       </div>
     </div>
   );
 }
 
 function calcSalesLift(result) {
-  if (!result?.leaderPrice || !result?.priceToTop1) return 40;
+  if (!result?.leaderPrice || !result?.priceToTop1) return 150;
   const ratio = Math.min(1, Math.max(0, result.priceToTop1 / result.leaderPrice));
-  return Math.max(40, Math.round(20 + ratio * 40));
+  return Math.max(150, Math.round(80 + ratio * 70));
 }
 
 function seedFromName(name) {
@@ -341,10 +379,14 @@ export default function App() {
 
   const normalizedGrowth = useMemo(() => {
     const base = { ...DEFAULT_GROWTH, ...growthData };
-    const lift = Math.max(40, Number(base.salesLiftPercent) || 40);
+    const lift = Math.max(150, Number(base.salesLiftPercent) || 150);
+    const traffic = Math.max(40, Math.min(90, Math.round(lift * 0.5)));
+    const conversion = Math.max(25, Math.min(70, Math.round(lift * 0.35)));
     return {
       ...base,
       salesLiftPercent: lift,
+      trafficGrowth: traffic,
+      conversionGrowth: conversion,
       captions: {
         ...base.captions,
         sales: `+${lift}% продаж за 30 дней после оптимизации цены и позиции`,
@@ -574,12 +616,11 @@ export default function App() {
             <div className="empty">Генерируем прогноз…</div>
           ) : (
             <GrowthCharts
-              profitNow={profitNow}
-              profitProjected={profitProjected}
               salesNow={Number(currentSales) || null}
               salesProjected={projectedSales}
               growth={normalizedGrowth.salesLiftPercent}
-              data={normalizedGrowth}
+              trafficGrowth={normalizedGrowth.trafficGrowth}
+              conversionGrowth={normalizedGrowth.conversionGrowth}
             />
           )}
         </section>

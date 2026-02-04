@@ -424,6 +424,7 @@ p {
 
 .bars.two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
 }
 
 .bar-group {
@@ -438,7 +439,7 @@ p {
   background: linear-gradient(180deg, #38bdf8, #0ea5e9);
   border-radius: 10px 10px 4px 4px;
   height: var(--h);
-  min-height: 40px;
+  min-height: 50px;
   transform: scaleY(0.2);
   transform-origin: bottom;
   animation: rise 1.2s ease forwards;
@@ -458,29 +459,43 @@ p {
   color: #111827;
 }
 
-.rings {
+.donuts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 16px;
 }
 
-.ring {
-  height: 130px;
-  border-radius: 16px;
+.donut-card {
   background: #f8fafc;
+  border-radius: 16px;
+  padding: 12px;
   border: 1px solid #e5e7eb;
+  text-align: center;
   display: grid;
-  place-items: center;
-  gap: 6px;
-  color: #0f172a;
+  justify-items: center;
+  gap: 8px;
+}
+
+.donut {
+  transform: rotate(-90deg);
+}
+
+.donut-bg {
+  stroke: #e5e7eb;
+}
+
+.donut-fg {
+  stroke: #0ea5e9;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+
+.donut-value {
   font-weight: 700;
+  color: #111827;
 }
 
-.ring span {
-  font-size: 20px;
-}
-
-.ring small {
+.donut-label {
   font-size: 12px;
   color: #6b7280;
 }
