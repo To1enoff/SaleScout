@@ -1,4 +1,13 @@
 ﻿import React, { useMemo, useState } from 'react';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
 import logo from '../assets/salescout__logo.png';
 
 const DEFAULT_URL = 'https://kaspi.kz/shop/p/apple-iphone-17-pro-max-256gb-oranzhevyi-145468241/?c=750000000';
@@ -49,48 +58,19 @@ function StepHeader({ step }) {
   );
 }
 
-function buildLinePath(points, width = 720, height = 200) {
-  if (!Array.isArray(points) || points.length === 0) return '';
-  const max = Math.max(...points.map((p) => p.value));
-  const min = Math.min(...points.map((p) => p.value));
-  const range = max - min || 1;
-  const step = (width - 20) / (points.length - 1 || 1);
-
-  return points
-    .map((point, index) => {
-      const x = 10 + index * step;
-      const y = height - 10 - ((point.value - min) / range) * (height - 40);
-      return `${index === 0 ? 'M' : 'L'}${x} ${y}`;
-    })
-    .join(' ');
-}
-
-function buildPoints(values, width = 720, height = 200) {
-  if (!Array.isArray(values) || values.length === 0) return [];
-  const max = Math.max(...values.map((p) => p.value));
-  const min = Math.min(...values.map((p) => p.value));
-  const range = max - min || 1;
-  const step = (width - 20) / (values.length - 1 || 1);
-
-  return values.map((point, index) => {
-    const x = 10 + index * step;
-    const y = height - 10 - ((point.value - min) / range) * (height - 40);
-    return { x, y, value: point.value, label: point.label };
-  });
-}
-
 function buildDailySeries(baseDaily, growthPercent) {
   const variance = [0, -2, 1, -1, 3, -2, 4, -1, 2, -3, 1, 0, 2, -2, 3, -1, 1, 0, 2, -2, 3, -1, 0, 2, -2, 1, 0, 2, -1, 3];
   const afterMultiplier = 1 + growthPercent / 100;
-  const before = variance.map((v, index) => ({
-    label: `День ${index + 1}`,
-    value: Math.max(1, Math.round(baseDaily + v)),
-  }));
-  const after = variance.map((v, index) => ({
-    label: `День ${index + 1}`,
-    value: Math.max(1, Math.round((baseDaily + v) * afterMultiplier)),
-  }));
-  return { before, after };
+
+  return variance.map((v, index) => {
+    const before = Math.max(1, Math.round(baseDaily + v));
+    const after = Math.max(1, Math.round((baseDaily + v) * afterMultiplier));
+    return {
+      day: index + 1,
+      before,
+      after,
+    };
+  });
 }
 
 function Donut({ percent, label }) {
@@ -128,58 +108,84 @@ function Donut({ percent, label }) {
   );
 }
 
-function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, conversionGrowth }) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, conversionGrowth, profitNow, profitProjected }) {
+  const [hovered, setHovered] = useState(null);
   const dailyNow = Math.max(1, Math.round((salesNow || 30) / 30));
   const dailySeries = buildDailySeries(dailyNow, growth);
-  const beforePath = buildLinePath(dailySeries.before);
-  const afterPath = buildLinePath(dailySeries.after);
-  const beforePoints = buildPoints(dailySeries.before);
-  const afterPoints = buildPoints(dailySeries.after);
 
-  const maxSales = Math.max(1, salesProjected || salesNow || 1);
-  const nowBar = salesNow ? Math.max(35, (salesNow / maxSales) * 100) : 35;
-  const afterBar = salesProjected ? Math.max(70, (salesProjected / maxSales) * 100) : 70;
+  const salesGrowthPct = growth;
+  const profitGrowthPct = profitNow && profitProjected ? Math.round(((profitProjected - profitNow) / profitNow) * 100) : growth;
+  const salesDiff = clamp(salesGrowthPct, 10, 200);
+  const profitDiff = clamp(profitGrowthPct, 10, 200);
+
+  const baseHeightSales = clamp((salesGrowthPct / 200) * 200, 60, 200);
+  const baseHeightProfit = clamp((profitGrowthPct / 200) * 200, 60, 200);
+
+  const salesHeight = hovered === 'sales' ? clamp(baseHeightSales * (1 + salesDiff / 100), 60, 200) : baseHeightSales;
+  const profitHeight = hovered === 'profit' ? clamp(baseHeightProfit * (1 + profitDiff / 100), 60, 200) : baseHeightProfit;
 
   return (
     <div className="charts">
       <div className="chart-card">
         <div className="chart-title">Продажи в день: сейчас и после (30 дней)</div>
-        <svg viewBox="0 0 720 200" className="chart">
-          <path className="chart-line muted" d={beforePath} />
-          <path className="chart-line" d={afterPath} />
-          {beforePoints.map((point, index) => (
-            <circle key={`b-${index}`} className="chart-point muted" cx={point.x} cy={point.y} r="4">
-              <title>
-                {point.label}: {point.value} шт.
-              </title>
-            </circle>
-          ))}
-          {afterPoints.map((point, index) => (
-            <circle key={`a-${index}`} className="chart-point" cx={point.x} cy={point.y} r="4">
-              <title>
-                {point.label}: {point.value} шт.
-              </title>
-            </circle>
-          ))}
-        </svg>
+        <div className="chart-canvas">
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={dailySeries} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(value) => [`${value} шт.`, 'Продажи']} />
+              <Line
+                type="monotone"
+                dataKey="before"
+                name="До"
+                stroke="#cbd5f5"
+                strokeWidth={3}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="monotone"
+                dataKey="after"
+                name="После"
+                stroke="#0ea5e9"
+                strokeWidth={3}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
         <div className="chart-caption">Рост продаж составляет 150% после выхода в ТОП‑1.</div>
       </div>
 
       <div className="chart-card">
-        <div className="chart-title">Продажи в месяц: сейчас и после</div>
-        <div className="bars two">
-          <div className="bar-group">
-            <div className="bar" style={{ '--h': `${nowBar}%` }} />
-            <div className="bar-label">Сейчас</div>
-            <div className="bar-value">{salesNow ?? '—'}</div>
+        <div className="chart-title">Рост: продажи и прибыль</div>
+        <div className="bars two tall">
+          <div
+            className="bar-group"
+            onMouseEnter={() => setHovered('sales')}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <div className="bar" style={{ height: `${salesHeight}px` }} />
+            <div className="bar-label">Рост продаж</div>
+            <div className="bar-value">+{salesGrowthPct}%</div>
           </div>
-          <div className="bar-group">
-            <div className="bar accent" style={{ '--h': `${afterBar}%` }} />
-            <div className="bar-label">После</div>
-            <div className="bar-value">{salesProjected ?? '—'}</div>
+          <div
+            className="bar-group"
+            onMouseEnter={() => setHovered('profit')}
+            onMouseLeave={() => setHovered(null)}
+          >
+            <div className="bar accent" style={{ height: `${profitHeight}px` }} />
+            <div className="bar-label">Рост прибыли</div>
+            <div className="bar-value">+{profitGrowthPct}%</div>
           </div>
         </div>
-        <div className="chart-caption">Разница видна сразу: рост объёма продаж после выхода в ТОП‑1.</div>
+        <div className="chart-caption">Наведи на колонну — она увеличится на разницу “до/после”.</div>
       </div>
 
       <div className="chart-card">
@@ -380,8 +386,8 @@ export default function App() {
   const normalizedGrowth = useMemo(() => {
     const base = { ...DEFAULT_GROWTH, ...growthData };
     const lift = Math.max(150, Number(base.salesLiftPercent) || 150);
-    const traffic = Math.max(40, Math.min(90, Math.round(lift * 0.5)));
-    const conversion = Math.max(25, Math.min(70, Math.round(lift * 0.35)));
+    const traffic = Math.max(35, Math.min(85, Math.round(lift * 0.5)));
+    const conversion = Math.max(20, Math.min(65, Math.round(lift * 0.35)));
     return {
       ...base,
       salesLiftPercent: lift,
@@ -621,6 +627,8 @@ export default function App() {
               growth={normalizedGrowth.salesLiftPercent}
               trafficGrowth={normalizedGrowth.trafficGrowth}
               conversionGrowth={normalizedGrowth.conversionGrowth}
+              profitNow={profitNow}
+              profitProjected={profitProjected}
             />
           )}
         </section>
