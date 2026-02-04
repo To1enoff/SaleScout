@@ -117,16 +117,24 @@ function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, convers
   const dailyNow = Math.max(1, Math.round((salesNow || 30) / 30));
   const dailySeries = buildDailySeries(dailyNow, growth);
 
-  const salesGrowthPct = growth;
-  const profitGrowthPct = profitNow && profitProjected ? Math.round(((profitProjected - profitNow) / profitNow) * 100) : growth;
-  const salesDiff = clamp(salesGrowthPct, 10, 200);
-  const profitDiff = clamp(profitGrowthPct, 10, 200);
+  const salesDiffPct = salesNow && salesProjected ? ((salesProjected - salesNow) / salesNow) * 100 : growth;
+  const profitDiffPct = profitNow && profitProjected ? ((profitProjected - profitNow) / profitNow) * 100 : growth;
 
-  const baseHeightSales = clamp((salesGrowthPct / 200) * 200, 60, 200);
-  const baseHeightProfit = clamp((profitGrowthPct / 200) * 200, 60, 200);
+  const salesDiff = clamp(Math.round(salesDiffPct), 10, 200);
+  const profitDiff = clamp(Math.round(profitDiffPct), 10, 200);
 
-  const salesHeight = hovered === 'sales' ? clamp(baseHeightSales * (1 + salesDiff / 100), 60, 200) : baseHeightSales;
-  const profitHeight = hovered === 'profit' ? clamp(baseHeightProfit * (1 + profitDiff / 100), 60, 200) : baseHeightProfit;
+  const baseSalesHeight = 120;
+  const baseProfitHeight = 120;
+
+  const salesHeight = hovered === 'sales'
+    ? clamp(baseSalesHeight * (1 + salesDiff / 100), 60, 200)
+    : baseSalesHeight;
+  const profitHeight = hovered === 'profit'
+    ? clamp(baseProfitHeight * (1 + profitDiff / 100), 60, 200)
+    : baseProfitHeight;
+
+  const salesValue = hovered === 'sales' ? salesProjected ?? '—' : salesNow ?? '—';
+  const profitValue = hovered === 'profit' ? profitProjected ?? '—' : profitNow ?? '—';
 
   return (
     <div className="charts">
@@ -171,21 +179,23 @@ function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, convers
             onMouseEnter={() => setHovered('sales')}
             onMouseLeave={() => setHovered(null)}
           >
-            <div className="bar" style={{ height: `${salesHeight}px` }} />
+            <div className="bar" style={{ height: `${salesHeight}px`, width: '100px' }} />
             <div className="bar-label">Рост продаж</div>
-            <div className="bar-value">+{salesGrowthPct}%</div>
+            <div className="bar-value">{salesValue}</div>
           </div>
           <div
             className="bar-group"
             onMouseEnter={() => setHovered('profit')}
             onMouseLeave={() => setHovered(null)}
           >
-            <div className="bar accent" style={{ height: `${profitHeight}px` }} />
+            <div className="bar accent" style={{ height: `${profitHeight}px`, width: '100px' }} />
             <div className="bar-label">Рост прибыли</div>
-            <div className="bar-value">+{profitGrowthPct}%</div>
+            <div className="bar-value">{profitValue}</div>
           </div>
         </div>
-        <div className="chart-caption">Наведи на колонну — она увеличится на разницу “до/после”.</div>
+        <div className="chart-caption">
+          Наведи на колонну — высота увеличится на процент разницы до/после.
+        </div>
       </div>
 
       <div className="chart-card">

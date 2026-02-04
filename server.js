@@ -30,12 +30,13 @@ function buildFallbackGrowth(base) {
     salesTrend: trend,
     conversionSeries,
     captions: {
-      sales: `+${salesLift}% продаж за 30 дней после оптимизации цены и позиции`,
-      conversion: `CR до ${conversion.toFixed(1)}% за счёт более привлекательного оффера`,
-      traffic: 'Рост органики и рекламы после вывода в ТОП?3',
+      sales: `+${salesLift}% пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ 30 пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ`,
+      conversion: `CR пїЅпїЅ ${conversion.toFixed(1)}% пїЅпїЅ пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ`,
+      traffic: 'пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅ?3',
     },
   };
 }
+
 
 async function generateGrowthWithGemini(base) {
   if (!GEMINI_API_KEY) {
@@ -43,31 +44,31 @@ async function generateGrowthWithGemini(base) {
   }
 
   const prompt = `
-Ты аналитик e-commerce. Верни строго JSON без пояснений.
-Нужно сгенерировать данные для графиков роста после услуг SaleScout.
-Входные данные:
+пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ e-commerce. пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ JSON пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.
+пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ SaleScout.
+пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ:
 productId: ${base?.productId || 'unknown'}
 leaderPrice: ${base?.leaderPrice ?? 'unknown'}
 myShopPrice: ${base?.myShopPrice ?? 'unknown'}
 myShopPosition: ${base?.myShopPosition ?? 'unknown'}
 priceToTop1: ${base?.priceToTop1 ?? 'unknown'}
 
-Формат JSON:
+пїЅпїЅпїЅпїЅпїЅпїЅ JSON:
 {
   "salesLiftPercent": number,          // 15-60
   "conversionPercent": number,         // 1.0-3.5
   "trafficOrganicPercent": number,     // 10-50
   "trafficAdsPercent": number,         // 15-60
-  "salesTrend": [7 чисел],             // рост по неделям, 7 точек, 10-60
-  "conversionSeries": [4 числа],       // 4 бара, 20-90
+  "salesTrend": [7 пїЅпїЅпїЅпїЅпїЅ],             // пїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ, 7 пїЅпїЅпїЅпїЅпїЅ, 10-60
+  "conversionSeries": [4 пїЅпїЅпїЅпїЅпїЅ],       // 4 пїЅпїЅпїЅпїЅ, 20-90
   "captions": {
-    "sales": "строка",
-    "conversion": "строка",
-    "traffic": "строка"
+    "sales": "пїЅпїЅпїЅпїЅпїЅпїЅ",
+    "conversion": "пїЅпїЅпїЅпїЅпїЅпїЅ",
+    "traffic": "пїЅпїЅпїЅпїЅпїЅпїЅ"
   }
 }
 
-Только валидный JSON.`.trim();
+пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ JSON.`.trim();
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
@@ -117,14 +118,14 @@ app.post('/api/analyze', async (req, res) => {
   const { productUrl, myShopName, options } = req.body || {};
 
   if (!productUrl || !myShopName) {
-    return res.status(400).json({ error: 'productUrl и myShopName обязательны.' });
+    return res.status(400).json({ error: 'productUrl пїЅ myShopName пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ.' });
   }
 
   try {
     const result = await analyzeKaspiProduct(productUrl, myShopName, options || {});
     return res.json(result);
   } catch (err) {
-    return res.status(400).json({ error: err.message || 'Ошибка анализа.' });
+    return res.status(400).json({ error: err.message || 'пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ.' });
   }
 });
 
