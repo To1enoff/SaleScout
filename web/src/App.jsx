@@ -98,8 +98,10 @@ function Donut({ percent, label }) {
           r={radius}
           strokeWidth={stroke}
           fill="none"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
+          style={{
+            '--donut-circ': circumference,
+            '--donut-offset': offset,
+          }}
         />
       </svg>
       <div className="donut-value">{normalized}%</div>
@@ -138,7 +140,7 @@ function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, convers
 
   return (
     <div className="charts">
-      <div className="chart-card">
+      <div className="chart-card chart-card--tall">
         <div className="chart-title">Продажи в день: сейчас и после (30 дней)</div>
         <div className="chart-canvas">
           <ResponsiveContainer width="100%" height={260}>
@@ -171,7 +173,7 @@ function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, convers
         <div className="chart-caption">Рост продаж составляет 150% после выхода в ТОП‑1.</div>
       </div>
 
-      <div className="chart-card">
+      <div className="chart-card chart-card--footer" style={{height:350}}>
         <div className="chart-title">Рост: продажи и прибыль</div>
         <div className="bars two tall">
           <div
@@ -179,7 +181,9 @@ function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, convers
             onMouseEnter={() => setHovered('sales')}
             onMouseLeave={() => setHovered(null)}
           >
-            <div className="bar" style={{ height: `${salesHeight}px`, width: '100px' }} />
+            <div className="bar-area">
+              <div className="bar" style={{ height: `${salesHeight}px`, width: '100px' }} />
+            </div>
             <div className="bar-label">Рост продаж</div>
             <div className="bar-value">{salesValue}</div>
           </div>
@@ -188,13 +192,17 @@ function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, convers
             onMouseEnter={() => setHovered('profit')}
             onMouseLeave={() => setHovered(null)}
           >
-            <div className="bar accent" style={{ height: `${profitHeight}px`, width: '100px' }} />
+            <div className="bar-area">
+              <div className="bar accent" style={{ height: `${profitHeight}px`, width: '100px' }} />
+            </div>
             <div className="bar-label">Рост прибыли</div>
-            <div className="bar-value">{profitValue}</div>
+            <div className="bar-value">{profitValue + "₸"}</div>
           </div>
         </div>
-        <div className="chart-caption">
-          Наведи на колонну — высота увеличится на процент разницы до/после.
+        <div className="chart-footer">
+          <div className="chart-caption">
+            Наведи на колонну — высота увеличится на процент разницы до/после.
+          </div>
         </div>
       </div>
 
@@ -514,8 +522,8 @@ export default function App() {
               <ResultRow label="Лидер" value={result.leaderShop} />
               <ResultRow label="Лучшая цена" value={result.leaderPrice} isPrice />
               <ResultRow label="Цена магазина" value={result.myShopPrice} isPrice />
-              <ResultRow label="ТОП‑N позиция" value={result.myShopPosition} />
-              <ResultRow label="Цена до ТОП‑1" value={result.priceToTop1} isPrice />
+              <ResultRow label="Позиция" value={"#" + result.myShopPosition} />
+              <ResultRow label="Цена до ТОП‑1" value={"-" + result.priceToTop1} isPrice />
             </div>
           ) : (
             <div className="empty">Нет данных. Вернитесь и запустите анализ.</div>
