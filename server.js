@@ -37,7 +37,6 @@ function buildFallbackGrowth(base) {
   };
 }
 
-
 async function generateGrowthWithGemini(base) {
   if (!GEMINI_API_KEY) {
     return buildFallbackGrowth(base);
