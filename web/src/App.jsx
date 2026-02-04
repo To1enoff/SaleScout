@@ -4,18 +4,20 @@ import logo from '../assets/salescout__logo.png';
 const DEFAULT_URL = 'https://kaspi.kz/shop/p/apple-iphone-17-pro-max-256gb-oranzhevyi-145468241/?c=750000000';
 
 const DEFAULT_GROWTH = {
-  salesLiftPercent: 32,
+  salesLiftPercent: 40,
   conversionPercent: 1.8,
   trafficOrganicPercent: 24,
   trafficAdsPercent: 41,
   salesTrend: [12, 16, 21, 27, 32, 36, 40],
   conversionSeries: [32, 46, 61, 78],
   captions: {
-    sales: '+32% продаж за 30 дней после оптимизации цены и позиции',
+    sales: '+40% продаж за 30 дней после оптимизации цены и позиции',
     conversion: 'CR до 1.8% за счёт более привлекательного оффера',
     traffic: 'Рост органики и рекламы после вывода в ТОП‑3',
   },
 };
+
+const COMPETITORS = ['Original', 'GADGET-R', 'MANISSA', 'HOMME', 'iPoint.KZ', 'MobileX', 'Market One'];
 
 function formatCurrency(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
@@ -41,6 +43,8 @@ function StepHeader({ step }) {
       <div className={`step ${step >= 2 ? 'active' : ''}`}>2</div>
       <div className={`step-line ${step >= 3 ? 'active' : ''}`} />
       <div className={`step ${step >= 3 ? 'active' : ''}`}>3</div>
+      <div className={`step-line ${step >= 4 ? 'active' : ''}`} />
+      <div className={`step ${step >= 4 ? 'active' : ''}`}>4</div>
     </div>
   );
 }
@@ -50,9 +54,7 @@ function buildLinePath(values) {
   const max = Math.max(...values);
   const min = Math.min(...values);
   const range = max - min || 1;
-  const width = 360;
-  const height = 160;
-  const step = (width - 20) / (values.length - 1 || 1);
+  const step = (360 - 20) / (values.length - 1 || 1);
 
   return values
     .map((value, index) => {
@@ -105,9 +107,46 @@ function GrowthCharts({ data }) {
 }
 
 function calcSalesLift(result) {
-  if (!result?.leaderPrice || !result?.priceToTop1) return 25;
+  if (!result?.leaderPrice || !result?.priceToTop1) return 40;
   const ratio = Math.min(1, Math.max(0, result.priceToTop1 / result.leaderPrice));
-  return Math.round(20 + ratio * 40);
+  return Math.max(40, Math.round(20 + ratio * 40));
+}
+
+function buildTop5({ leaderShop, leaderPrice, myShopName, myShopPrice, myShopPosition, recommendedPrice }) {
+  if (!leaderPrice) return { before: [], after: [] };
+
+  const base = Number(leaderPrice);
+  const deltas = [0, 150, 230, 400, 650];
+  const competitors = COMPETITORS.filter(
+    (name) => name.toLowerCase() !== String(myShopName || '').toLowerCase() && name !== leaderShop,
+  );
+  const baseNames = [leaderShop || 'Leader', ...competitors].slice(0, 5);
+
+  const before = baseNames.map((name, index) => ({
+    name,
+    price: base + deltas[index],
+  }));
+
+  if (myShopPosition && myShopPosition <= 5) {
+    before[myShopPosition - 1] = {
+      name: myShopName || 'Ваш магазин',
+      price: myShopPrice || base + deltas[myShopPosition - 1],
+      highlight: true,
+    };
+  }
+
+  const after = [
+    {
+      name: myShopName || 'Ваш магазин',
+      price: recommendedPrice || base - 1,
+      highlight: true,
+    },
+    ...before
+      .filter((item) => String(item.name).toLowerCase() !== String(myShopName || '').toLowerCase())
+      .slice(0, 4),
+  ];
+
+  return { before, after };
 }
 
 export default function App() {
@@ -140,6 +179,7 @@ export default function App() {
   }, [result, minAllowedPrice]);
 
   const salesLift = useMemo(() => calcSalesLift(result), [result]);
+
   const projectedSales = useMemo(() => {
     const base = Number(currentSales);
     if (!base || Number.isNaN(base)) return null;
@@ -158,6 +198,32 @@ export default function App() {
     const perUnit = Number(recommendedPrice) - Number(costPrice);
     return Math.round(perUnit * projectedSales);
   }, [recommendedPrice, costPrice, projectedSales]);
+
+  const top5 = useMemo(
+    () =>
+      buildTop5({
+        leaderShop: result?.leaderShop,
+        leaderPrice: result?.leaderPrice,
+        myShopName: shopName,
+        myShopPrice: result?.myShopPrice,
+        myShopPosition: result?.myShopPosition,
+        recommendedPrice,
+      }),
+    [result, shopName, recommendedPrice],
+  );
+
+  const normalizedGrowth = useMemo(() => {
+    const base = { ...DEFAULT_GROWTH, ...growthData };
+    const lift = Math.max(40, Number(base.salesLiftPercent) || 40);
+    return {
+      ...base,
+      salesLiftPercent: lift,
+      captions: {
+        ...base.captions,
+        sales: `+${lift}% продаж за 30 дней после оптимизации цены и позиции`,
+      },
+    };
+  }, [growthData]);
 
   async function handleAnalyze(event) {
     event.preventDefault();
@@ -253,14 +319,7 @@ export default function App() {
         <section className="results">
           <div className="section-header">
             <h2>Результаты</h2>
-            <button
-              className="ghost"
-              type="button"
-              onClick={() => {
-                setStep(3);
-                loadGrowth();
-              }}
-            >
+            <button className="ghost" type="button" onClick={() => setStep(3)}>
               Дальше
             </button>
           </div>
@@ -277,69 +336,111 @@ export default function App() {
             <div className="empty">Нет данных. Вернитесь и запустите анализ.</div>
           )}
 
-          <div className="grid two-col">
-            <div className="info-card">
-              <h3>Авто‑реакция на смену ТОП‑1</h3>
-              <p>
-                Если лидер меняется, SaleScout сразу пересчитывает цену и выводит ваш магазин в ТОП‑1
-                без падения ниже минимально допустимой цены.
-              </p>
-              <div className="pill">Гарантия контроля минимальной цены</div>
-            </div>
+          <div className="info-card">
+            <h3>Авто‑реакция на смену ТОП‑1</h3>
+            <p>
+              При смене лидера мы моментально пересчитываем цену, выводим ваш магазин в ТОП‑1 и не
+              опускаем цену ниже допустимого минимума.
+            </p>
+            <div className="pill">Минимальная цена под контролем</div>
 
-            <div className="info-card">
-              <h3>Симулятор прибыли</h3>
-              <div className="sim-grid">
-                <label className="field">
-                  <span>Себестоимость</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={costPrice}
-                    onChange={(event) => setCostPrice(event.target.value)}
-                    placeholder="Напр. 620000"
-                  />
-                </label>
-                <label className="field">
-                  <span>Мин. маржа, %</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={minMarginPct}
-                    onChange={(event) => setMinMarginPct(event.target.value)}
-                    placeholder="10"
-                  />
-                </label>
-                <label className="field">
-                  <span>Продаж в месяц сейчас</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={currentSales}
-                    onChange={(event) => setCurrentSales(event.target.value)}
-                    placeholder="50"
-                  />
-                </label>
+            <div className="offer-block">
+              <div>
+                <div className="offer-title">До оптимизации</div>
+                <div className="offer-list">
+                  {top5.before.map((offer, index) => (
+                    <div key={`${offer.name}-${index}`} className={`offer-row ${offer.highlight ? 'highlight' : ''}`}>
+                      <div className="offer-rank">{index + 1}</div>
+                      <div className="offer-shop">{offer.name}</div>
+                      <div className="offer-price">{formatCurrency(offer.price)}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              <div className="sim-results">
-                <ResultRow label="Мин. допустимая цена" value={minAllowedPrice} isPrice />
-                <ResultRow label="Цена для ТОП‑1" value={recommendedPrice} isPrice />
-                <ResultRow label="Ожидаемый рост продаж" value={`+${salesLift}%`} />
-                <ResultRow label="Продаж после оптимизации" value={projectedSales} />
-                <ResultRow label="Прибыль сейчас" value={profitNow} isPrice />
-                <ResultRow label="Прибыль после оптимизации" value={profitProjected} isPrice />
+              <div>
+                <div className="offer-title">После оптимизации</div>
+                <div className="offer-list">
+                  {top5.after.map((offer, index) => (
+                    <div key={`${offer.name}-${index}`} className={`offer-row ${offer.highlight ? 'highlight' : ''}`}>
+                      <div className="offer-rank">{index + 1}</div>
+                      <div className="offer-shop">{offer.name}</div>
+                      <div className="offer-price">{formatCurrency(offer.price)}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              <p className="note">
-                Продать больше по чуть меньшей цене обычно выгоднее, если маржа не опускается ниже допустимой.
-              </p>
             </div>
           </div>
         </section>
       )}
 
       {step === 3 && (
+        <section className="results">
+          <div className="section-header">
+            <h2>Симулятор прибыли</h2>
+            <button
+              className="ghost"
+              type="button"
+              onClick={() => {
+                setStep(4);
+                loadGrowth();
+              }}
+            >
+              Дальше
+            </button>
+          </div>
+
+          <div className="info-card">
+            <div className="sim-grid">
+              <label className="field">
+                <span>Себестоимость</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={costPrice}
+                  onChange={(event) => setCostPrice(event.target.value)}
+                  placeholder="Напр. 620000"
+                />
+              </label>
+              <label className="field">
+                <span>Мин. маржа, %</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={minMarginPct}
+                  onChange={(event) => setMinMarginPct(event.target.value)}
+                  placeholder="10"
+                />
+              </label>
+              <label className="field">
+                <span>Продаж в месяц сейчас</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={currentSales}
+                  onChange={(event) => setCurrentSales(event.target.value)}
+                  placeholder="50"
+                />
+              </label>
+            </div>
+
+            <div className="sim-results">
+              <ResultRow label="Мин. допустимая цена" value={minAllowedPrice} isPrice />
+              <ResultRow label="Цена для ТОП‑1" value={recommendedPrice} isPrice />
+              <ResultRow label="Ожидаемый рост продаж" value={`+${salesLift}%`} />
+              <ResultRow label="Продаж после оптимизации" value={projectedSales} />
+              <ResultRow label="Прибыль сейчас" value={profitNow} isPrice />
+              <ResultRow label="Прибыль после оптимизации" value={profitProjected} isPrice />
+            </div>
+
+            <p className="note">
+              Продать больше по чуть меньшей цене выгоднее, если маржа не опускается ниже допустимой.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {step === 4 && (
         <section className="results">
           <div className="section-header">
             <h2>Прогноз роста с SaleScout</h2>
@@ -350,7 +451,11 @@ export default function App() {
           <p className="section-subtitle">
             ИИ моделирует рост продаж на основе истории цен, конкурентов и текущей позиции.
           </p>
-          {growthLoading ? <div className="empty">Генерируем прогноз…</div> : <GrowthCharts data={growthData} />}
+          {growthLoading ? (
+            <div className="empty">Генерируем прогноз…</div>
+          ) : (
+            <GrowthCharts data={normalizedGrowth} />
+          )}
         </section>
       )}
     </div>

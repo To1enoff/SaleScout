@@ -191,11 +191,6 @@ p {
   gap: 12px;
 }
 
-.two-col {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-}
-
 .row {
   display: flex;
   justify-content: space-between;
@@ -234,6 +229,52 @@ p {
   border-radius: 999px;
 }
 
+.offer-block {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.offer-title {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.offer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.offer-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.offer-row.highlight {
+  border-color: #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.offer-rank {
+  font-weight: 700;
+  color: #334155;
+}
+
+.offer-shop {
+  font-weight: 600;
+}
+
+.offer-price {
+  font-weight: 700;
+}
+
 .sim-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -258,22 +299,17 @@ p {
 }
 
 .charts {
-  display: flex;
+  display: grid;
   gap: 20px;
-  align-items: stretch;
-  overflow-x: auto;
-  padding-bottom: 4px;
 }
 
 .chart-card {
   background: #fff;
   border-radius: 20px;
-  padding: 20px;
+  padding: 24px;
   box-shadow: 0 12px 24px rgba(15, 23, 42, 0.1);
   display: grid;
   gap: 12px;
-  min-width: 280px;
-  flex: 1 0 320px;
 }
 
 .chart-title {
@@ -283,7 +319,7 @@ p {
 
 .chart {
   width: 100%;
-  height: 200px;
+  height: 240px;
 }
 
 .chart-line {
@@ -306,7 +342,7 @@ p {
   display: flex;
   align-items: flex-end;
   gap: 10px;
-  height: 170px;
+  height: 180px;
 }
 
 .bar {
@@ -325,8 +361,8 @@ p {
 }
 
 .ring {
-  width: 110px;
-  height: 110px;
+  width: 120px;
+  height: 120px;
   border-radius: 50%;
   border: 8px solid rgba(15, 23, 42, 0.1);
   border-top-color: #6c63ff;
