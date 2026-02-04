@@ -65,42 +65,93 @@ function buildLinePath(values) {
     .join(' ');
 }
 
-function GrowthCharts({ data }) {
-  const linePath = buildLinePath(data.salesTrend);
-  const areaPath = `${linePath} L350 150 L10 150 Z`;
+function buildPoints(values) {
+  if (!Array.isArray(values) || values.length === 0) return [];
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = max - min || 1;
+  const step = (360 - 20) / (values.length - 1 || 1);
+
+  return values.map((value, index) => {
+    const x = 10 + index * step;
+    const y = 150 - ((value - min) / range) * 120;
+    return { x, y, value };
+  });
+}
+
+function interpolateSeries(start, end, points = 7) {
+  if (start === null || end === null || Number.isNaN(start) || Number.isNaN(end)) {
+    return Array.from({ length: points }, (_, index) => 10 + index * 5);
+  }
+  const step = (end - start) / (points - 1 || 1);
+  return Array.from({ length: points }, (_, index) => Math.round(start + step * index));
+}
+
+function GrowthCharts({ profitNow, profitProjected, salesNow, salesProjected, growth }) {
+  const profitBefore = interpolateSeries(profitNow ?? 0, profitNow ?? 0, 7);
+  const profitAfter = interpolateSeries(profitNow ?? 0, profitProjected ?? profitNow ?? 0, 7);
+  const beforePath = buildLinePath(profitBefore);
+  const afterPath = buildLinePath(profitAfter);
+  const beforePoints = buildPoints(profitBefore);
+  const afterPoints = buildPoints(profitAfter);
 
   return (
     <div className="charts">
       <div className="chart-card">
-        <div className="chart-title">ИИ‑прогноз роста продаж</div>
+        <div className="chart-title">Рост прибыли: до и после</div>
         <svg viewBox="0 0 360 160" className="chart">
-          <path className="chart-line" d={linePath} />
-          <path className="chart-area" d={areaPath} />
-        </svg>
-        <div className="chart-caption">{data.captions?.sales}</div>
-      </div>
-
-      <div className="chart-card">
-        <div className="chart-title">ИИ‑оценка конверсии</div>
-        <div className="bars">
-          {data.conversionSeries.map((value, index) => (
-            <div key={index} className="bar" style={{ '--h': `${value}%` }} />
+          <path className="chart-line muted" d={beforePath} />
+          <path className="chart-line" d={afterPath} />
+          {beforePoints.map((point, index) => (
+            <circle key={`b-${index}`} className="chart-point muted" cx={point.x} cy={point.y} r="4">
+              <title>{formatCurrency(point.value)}</title>
+            </circle>
           ))}
+          {afterPoints.map((point, index) => (
+            <circle key={`a-${index}`} className="chart-point" cx={point.x} cy={point.y} r="4">
+              <title>{formatCurrency(point.value)}</title>
+            </circle>
+          ))}
+        </svg>
+        <div className="chart-caption">
+          Наведите на точки, чтобы увидеть значения прибыли. Линия «после» — с новой ценой.
         </div>
-        <div className="chart-caption">{data.captions?.conversion}</div>
       </div>
 
       <div className="chart-card">
-        <div className="chart-title">ИИ‑распределение трафика</div>
+        <div className="chart-title">Продажи в месяц: сейчас и после</div>
+        <div className="bars two">
+          <div className="bar-group">
+            <div className="bar" style={{ '--h': '55%' }} />
+            <div className="bar-label">Сейчас</div>
+            <div className="bar-value">{salesNow ?? '—'}</div>
+          </div>
+          <div className="bar-group">
+            <div className="bar accent" style={{ '--h': '85%' }} />
+            <div className="bar-label">После</div>
+            <div className="bar-value">{salesProjected ?? '—'}</div>
+          </div>
+        </div>
+        <div className="chart-caption">Рост продаж не ниже {growth}% при выходе в ТОП‑1.</div>
+      </div>
+
+      <div className="chart-card">
+        <div className="chart-title">Баланс влияния</div>
         <div className="rings">
           <div className="ring">
-            <span>+{data.trafficOrganicPercent}%</span>
+            <span>+{growth}%</span>
+            <small>Продажи</small>
           </div>
           <div className="ring">
-            <span>+{data.trafficAdsPercent}%</span>
+            <span>+{Math.max(20, growth - 10)}%</span>
+            <small>Трафик</small>
+          </div>
+          <div className="ring">
+            <span>+{Math.max(12, growth - 22)}%</span>
+            <small>Конверсия</small>
           </div>
         </div>
-        <div className="chart-caption">{data.captions?.traffic}</div>
+        <div className="chart-caption">Сбалансированный рост: продажи, трафик и конверсия.</div>
       </div>
     </div>
   );
@@ -110,6 +161,11 @@ function calcSalesLift(result) {
   if (!result?.leaderPrice || !result?.priceToTop1) return 40;
   const ratio = Math.min(1, Math.max(0, result.priceToTop1 / result.leaderPrice));
   return Math.max(40, Math.round(20 + ratio * 40));
+}
+
+function seedFromName(name) {
+  const text = String(name || 'shop');
+  return text.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
 }
 
 function buildTop5({ leaderShop, leaderPrice, myShopName, myShopPrice, myShopPosition, recommendedPrice }) {
@@ -147,6 +203,77 @@ function buildTop5({ leaderShop, leaderPrice, myShopName, myShopPrice, myShopPos
   ];
 
   return { before, after };
+}
+
+function buildOfferMeta(offer) {
+  const seed = seedFromName(offer.name);
+  const rating = 4 + (seed % 10) / 10;
+  const reviews = 20 + (seed % 180);
+  const monthly = Math.round(Number(offer.price) / 24);
+
+  const shippingLines = [
+    'Постамат, Пт, бесплатно',
+    'Доставка, Пт, бесплатно',
+    'Express, завтра до 14:00, 995 ₸',
+  ];
+
+  return {
+    rating: rating.toFixed(1),
+    reviews,
+    monthly,
+    shippingLines,
+  };
+}
+
+function RatingStars({ rating }) {
+  const full = Math.floor(rating);
+  const stars = Array.from({ length: 5 }, (_, index) => index < full);
+  return (
+    <div className="stars">
+      {stars.map((filled, index) => (
+        <span key={index} className={filled ? 'star filled' : 'star'}>
+          ★
+        </span>
+      ))}
+      <span className="rating-value">{rating}</span>
+    </div>
+  );
+}
+
+function OfferRow({ offer }) {
+  const meta = buildOfferMeta(offer);
+
+  return (
+    <div className={`offer-row kaspi ${offer.highlight ? 'highlight' : ''}`}>
+      <div className="offer-left">
+        <div className="offer-shop">
+          {offer.name}
+          {offer.highlight ? <span className="badge">Ваш магазин</span> : null}
+        </div>
+        <div className="offer-rating">
+          <RatingStars rating={Number(meta.rating)} />
+          <span className="reviews">({meta.reviews} отзывов)</span>
+        </div>
+      </div>
+
+      <div className="offer-middle">
+        {meta.shippingLines.map((line, lineIndex) => (
+          <div key={lineIndex} className="shipping-line">
+            {line}
+          </div>
+        ))}
+      </div>
+
+      <div className="offer-right">
+        <div className="offer-price">{formatCurrency(offer.price)}</div>
+        <div className="offer-monthly">{formatCurrency(meta.monthly)}</div>
+      </div>
+
+      <button className="offer-button" type="button">
+        Выбрать
+      </button>
+    </div>
+  );
 }
 
 export default function App() {
@@ -349,11 +476,7 @@ export default function App() {
                 <div className="offer-title">До оптимизации</div>
                 <div className="offer-list">
                   {top5.before.map((offer, index) => (
-                    <div key={`${offer.name}-${index}`} className={`offer-row ${offer.highlight ? 'highlight' : ''}`}>
-                      <div className="offer-rank">{index + 1}</div>
-                      <div className="offer-shop">{offer.name}</div>
-                      <div className="offer-price">{formatCurrency(offer.price)}</div>
-                    </div>
+                    <OfferRow key={`before-${offer.name}-${index}`} offer={offer} />
                   ))}
                 </div>
               </div>
@@ -361,11 +484,7 @@ export default function App() {
                 <div className="offer-title">После оптимизации</div>
                 <div className="offer-list">
                   {top5.after.map((offer, index) => (
-                    <div key={`${offer.name}-${index}`} className={`offer-row ${offer.highlight ? 'highlight' : ''}`}>
-                      <div className="offer-rank">{index + 1}</div>
-                      <div className="offer-shop">{offer.name}</div>
-                      <div className="offer-price">{formatCurrency(offer.price)}</div>
-                    </div>
+                    <OfferRow key={`after-${offer.name}-${index}`} offer={offer} />
                   ))}
                 </div>
               </div>
@@ -443,18 +562,25 @@ export default function App() {
       {step === 4 && (
         <section className="results">
           <div className="section-header">
-            <h2>Прогноз роста с SaleScout</h2>
+            <h2>Прогноз роста</h2>
             <button className="ghost" type="button" onClick={() => setStep(1)}>
               Новый анализ
             </button>
           </div>
           <p className="section-subtitle">
-            ИИ моделирует рост продаж на основе истории цен, конкурентов и текущей позиции.
+            Графики построены по текущим данным: прибыль, продажи и вклад каналов.
           </p>
           {growthLoading ? (
             <div className="empty">Генерируем прогноз…</div>
           ) : (
-            <GrowthCharts data={normalizedGrowth} />
+            <GrowthCharts
+              profitNow={profitNow}
+              profitProjected={profitProjected}
+              salesNow={Number(currentSales) || null}
+              salesProjected={projectedSales}
+              growth={normalizedGrowth.salesLiftPercent}
+              data={normalizedGrowth}
+            />
           )}
         </section>
       )}
