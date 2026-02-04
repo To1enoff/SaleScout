@@ -1,0 +1,24 @@
+{
+  "name": "shop_analyzer",
+  "version": "1.0.0",
+  "description": "SaleScout Kaspi price analyzer",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node server.js",
+    "dev:web": "npm --prefix web run dev",
+    "install:web": "npm --prefix web install"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "undici": "^6.19.8"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  }
+}
