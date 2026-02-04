@@ -104,6 +104,12 @@ function GrowthCharts({ data }) {
   );
 }
 
+function calcSalesLift(result) {
+  if (!result?.leaderPrice || !result?.priceToTop1) return 25;
+  const ratio = Math.min(1, Math.max(0, result.priceToTop1 / result.leaderPrice));
+  return Math.round(20 + ratio * 40);
+}
+
 export default function App() {
   const [productUrl, setProductUrl] = useState(DEFAULT_URL);
   const [shopName, setShopName] = useState('GadgetPro');
@@ -113,8 +119,45 @@ export default function App() {
   const [step, setStep] = useState(1);
   const [growthData, setGrowthData] = useState(DEFAULT_GROWTH);
   const [growthLoading, setGrowthLoading] = useState(false);
+  const [costPrice, setCostPrice] = useState('');
+  const [minMarginPct, setMinMarginPct] = useState('10');
+  const [currentSales, setCurrentSales] = useState('50');
 
   const canSubmit = useMemo(() => productUrl.trim() && shopName.trim(), [productUrl, shopName]);
+
+  const minAllowedPrice = useMemo(() => {
+    const cost = Number(costPrice);
+    const margin = Number(minMarginPct) / 100;
+    if (!cost || Number.isNaN(cost)) return null;
+    return Math.round(cost * (1 + (Number.isNaN(margin) ? 0 : margin)));
+  }, [costPrice, minMarginPct]);
+
+  const recommendedPrice = useMemo(() => {
+    if (!result?.leaderPrice) return null;
+    const desired = result.leaderPrice - 1;
+    if (!minAllowedPrice) return desired;
+    return Math.max(desired, minAllowedPrice);
+  }, [result, minAllowedPrice]);
+
+  const salesLift = useMemo(() => calcSalesLift(result), [result]);
+  const projectedSales = useMemo(() => {
+    const base = Number(currentSales);
+    if (!base || Number.isNaN(base)) return null;
+    return Math.round(base * (1 + salesLift / 100));
+  }, [currentSales, salesLift]);
+
+  const profitNow = useMemo(() => {
+    if (!result?.myShopPrice || !costPrice) return null;
+    const units = Number(currentSales) || 0;
+    const perUnit = Number(result.myShopPrice) - Number(costPrice);
+    return Math.round(perUnit * units);
+  }, [result, costPrice, currentSales]);
+
+  const profitProjected = useMemo(() => {
+    if (!recommendedPrice || !costPrice || !projectedSales) return null;
+    const perUnit = Number(recommendedPrice) - Number(costPrice);
+    return Math.round(perUnit * projectedSales);
+  }, [recommendedPrice, costPrice, projectedSales]);
 
   async function handleAnalyze(event) {
     event.preventDefault();
@@ -227,12 +270,72 @@ export default function App() {
               <ResultRow label="Лидер" value={result.leaderShop} />
               <ResultRow label="Лучшая цена" value={result.leaderPrice} isPrice />
               <ResultRow label="Цена магазина" value={result.myShopPrice} isPrice />
-              <ResultRow label="Позиция" value={"#" + result.myShopPosition} />
+              <ResultRow label="ТОП‑N позиция" value={result.myShopPosition} />
               <ResultRow label="Цена до ТОП‑1" value={result.priceToTop1} isPrice />
             </div>
           ) : (
             <div className="empty">Нет данных. Вернитесь и запустите анализ.</div>
           )}
+
+          <div className="grid two-col">
+            <div className="info-card">
+              <h3>Авто‑реакция на смену ТОП‑1</h3>
+              <p>
+                Если лидер меняется, SaleScout сразу пересчитывает цену и выводит ваш магазин в ТОП‑1
+                без падения ниже минимально допустимой цены.
+              </p>
+              <div className="pill">Гарантия контроля минимальной цены</div>
+            </div>
+
+            <div className="info-card">
+              <h3>Симулятор прибыли</h3>
+              <div className="sim-grid">
+                <label className="field">
+                  <span>Себестоимость</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={costPrice}
+                    onChange={(event) => setCostPrice(event.target.value)}
+                    placeholder="Напр. 620000"
+                  />
+                </label>
+                <label className="field">
+                  <span>Мин. маржа, %</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={minMarginPct}
+                    onChange={(event) => setMinMarginPct(event.target.value)}
+                    placeholder="10"
+                  />
+                </label>
+                <label className="field">
+                  <span>Продаж в месяц сейчас</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={currentSales}
+                    onChange={(event) => setCurrentSales(event.target.value)}
+                    placeholder="50"
+                  />
+                </label>
+              </div>
+
+              <div className="sim-results">
+                <ResultRow label="Мин. допустимая цена" value={minAllowedPrice} isPrice />
+                <ResultRow label="Цена для ТОП‑1" value={recommendedPrice} isPrice />
+                <ResultRow label="Ожидаемый рост продаж" value={`+${salesLift}%`} />
+                <ResultRow label="Продаж после оптимизации" value={projectedSales} />
+                <ResultRow label="Прибыль сейчас" value={profitNow} isPrice />
+                <ResultRow label="Прибыль после оптимизации" value={profitProjected} isPrice />
+              </div>
+
+              <p className="note">
+                Продать больше по чуть меньшей цене обычно выгоднее, если маржа не опускается ниже допустимой.
+              </p>
+            </div>
+          </div>
         </section>
       )}
 
