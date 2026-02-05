@@ -23,10 +23,12 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install
-        run: npm --prefix web install
+        working-directory: web
+        run: npm install
 
       - name: Build
-        run: node ./web/node_modules/vite/bin/vite.js build
+        working-directory: web
+        run: node ./node_modules/vite/bin/vite.js build
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
