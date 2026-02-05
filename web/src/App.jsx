@@ -138,8 +138,53 @@ function GrowthCharts({ salesNow, salesProjected, growth, trafficGrowth, convers
   const salesValue = hovered === 'sales' ? salesProjected ?? '—' : salesNow ?? '—';
   const profitValue = hovered === 'profit' ? profitProjected ?? '—' : profitNow ?? '—';
 
+  const profitSeries = [
+    {
+      day: 1,
+      now: profitNow ? Math.max(1, Math.round(profitNow * 0.55)) : 0,
+      after: profitProjected ? Math.max(1, Math.round(profitProjected * 0.55)) : 0,
+    },
+    {
+      day: 30,
+      now: profitNow ?? 0,
+      after: profitProjected ?? 0,
+    },
+  ];
+
   return (
     <div className="charts">
+      <div className="chart-card">
+        <div className="chart-title">Прибыль: сейчас и после оптимизации</div>
+        <div className="chart-canvas">
+          <ResponsiveContainer width="100%" height={220}>
+            <LineChart data={profitSeries} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
+              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(value) => [formatCurrency(value), 'Прибыль']} />
+              <Line
+                type="linear"
+                dataKey="now"
+                name="Сейчас"
+                stroke="#cbd5f5"
+                strokeWidth={3}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+              <Line
+                type="linear"
+                dataKey="after"
+                name="После"
+                stroke="#0ea5e9"
+                strokeWidth={3}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="chart-caption">Наведи на точку, чтобы увидеть значение прибыли.</div>
+      </div>
       <div className="chart-card chart-card--tall">
         <div className="chart-title">Продажи в день: сейчас и после (30 дней)</div>
         <div className="chart-canvas">
@@ -350,6 +395,7 @@ export default function App() {
   const [costPrice, setCostPrice] = useState('');
   const [minMarginPct, setMinMarginPct] = useState('10');
   const [currentSales, setCurrentSales] = useState('50');
+  const [customPrice, setCustomPrice] = useState('');
 
   const canSubmit = useMemo(() => productUrl.trim() && shopName.trim(), [productUrl, shopName]);
 
@@ -387,6 +433,19 @@ export default function App() {
     const perUnit = Number(recommendedPrice) - Number(costPrice);
     return Math.round(perUnit * projectedSales);
   }, [recommendedPrice, costPrice, projectedSales]);
+
+  const effectivePrice = useMemo(() => {
+    const parsed = Number(customPrice);
+    if (!customPrice || Number.isNaN(parsed)) return recommendedPrice;
+    if (!minAllowedPrice) return parsed;
+    return Math.max(parsed, minAllowedPrice);
+  }, [customPrice, recommendedPrice, minAllowedPrice]);
+
+  const profitProjectedCustom = useMemo(() => {
+    if (!effectivePrice || !costPrice || !projectedSales) return null;
+    const perUnit = Number(effectivePrice) - Number(costPrice);
+    return Math.round(perUnit * projectedSales);
+  }, [effectivePrice, costPrice, projectedSales]);
 
   const top5 = useMemo(
     () =>
@@ -537,21 +596,95 @@ export default function App() {
             </p>
             <div className="pill">Минимальная цена под контролем</div>
 
-            <div className="offer-block">
-              <div>
-                <div className="offer-title">До оптимизации</div>
-                <div className="offer-list">
-                  {top5.before.map((offer, index) => (
-                    <OfferRow key={`before-${offer.name}-${index}`} offer={offer} />
-                  ))}
+            <div className="offer-block phone-compare">
+              <div className="phone">
+                <div className="phone-shell">
+                  <div className="phone-notch" />
+                  <div className="phone-screen">
+                    <div className="kaspi-header">
+                      <span className="kaspi-time">17:48</span>
+                      <div className="kaspi-icons">
+                        <span className="kaspi-signal" />
+                        <span className="kaspi-wifi" />
+                        <span className="kaspi-battery">64</span>
+                      </div>
+                    </div>
+                    <div className="kaspi-search">
+                      <span className="kaspi-back">‹</span>
+                      <div className="kaspi-search-input">
+                        <span className="kaspi-search-icon" />
+                        Поиск в Магазине
+                      </div>
+                      <span className="kaspi-close">×</span>
+                    </div>
+                    <div className="kaspi-tabs">
+                      <div className="tab">Обзор</div>
+                      <div className="tab active">Продавцы</div>
+                      <div className="tab">О товаре</div>
+                      <div className="tab">Отзывы</div>
+                    </div>
+                    <div className="kaspi-banner">
+                      Бонусы при оплате Kaspi Gold. Доставка завтра.
+                    </div>
+                    <div className="kaspi-pills">
+                      <span>3 мес</span>
+                      <span>6 мес</span>
+                      <span className="active">12 мес</span>
+                      <span>24 мес</span>
+                    </div>
+                    <div className="kaspi-subtitle">До оптимизации</div>
+                    <div className="offer-list kaspi-list">
+                      {top5.before.map((offer, index) => (
+                        <OfferRow key={`before-${offer.name}-${index}`} offer={offer} />
+                      ))}
+                    </div>
+                    <div className="kaspi-spacer" />
+                  </div>
                 </div>
               </div>
-              <div>
-                <div className="offer-title">После оптимизации</div>
-                <div className="offer-list">
-                  {top5.after.map((offer, index) => (
-                    <OfferRow key={`after-${offer.name}-${index}`} offer={offer} />
-                  ))}
+              <div className="phone">
+                <div className="phone-shell">
+                  <div className="phone-notch" />
+                  <div className="phone-screen">
+                    <div className="kaspi-header">
+                      <span className="kaspi-time">17:48</span>
+                      <div className="kaspi-icons">
+                        <span className="kaspi-signal" />
+                        <span className="kaspi-wifi" />
+                        <span className="kaspi-battery">64</span>
+                      </div>
+                    </div>
+                    <div className="kaspi-search">
+                      <span className="kaspi-back">‹</span>
+                      <div className="kaspi-search-input">
+                        <span className="kaspi-search-icon" />
+                        Поиск в Магазине
+                      </div>
+                      <span className="kaspi-close">×</span>
+                    </div>
+                    <div className="kaspi-tabs">
+                      <div className="tab">Обзор</div>
+                      <div className="tab active">Продавцы</div>
+                      <div className="tab">О товаре</div>
+                      <div className="tab">Отзывы</div>
+                    </div>
+                    <div className="kaspi-banner">
+                      Бонусы при оплате Kaspi Gold. Доставка завтра.
+                    </div>
+                    <div className="kaspi-pills">
+                      <span>3 мес</span>
+                      <span>6 мес</span>
+                      <span className="active">12 мес</span>
+                      <span>24 мес</span>
+                    </div>
+                    <div className="kaspi-subtitle">После оптимизации</div>
+                    <div className="offer-list kaspi-list">
+                      {top5.after.map((offer, index) => (
+                        <OfferRow key={`after-${offer.name}-${index}`} offer={offer} />
+                      ))}
+                    </div>
+                    <div className="kaspi-spacer" />
+                  </div>
                 </div>
               </div>
             </div>
@@ -636,6 +769,31 @@ export default function App() {
           <p className="section-subtitle">
             Графики построены по текущим данным: прибыль, продажи и вклад каналов.
           </p>
+          <div className="info-card">
+            <div className="slider-block">
+              <div className="slider-header">
+                <span>Цена (не ниже минимальной)</span>
+                <strong>{formatCurrency(effectivePrice)}</strong>
+              </div>
+              <input
+                className="price-slider"
+                type="range"
+                min={minAllowedPrice ?? 0}
+                max={result?.leaderPrice ? result.leaderPrice - 1 : recommendedPrice ?? minAllowedPrice ?? 0}
+                value={effectivePrice ?? 0}
+                onChange={(event) => setCustomPrice(event.target.value)}
+              />
+              <div className="slider-range">
+                <span>Мин: {formatCurrency(minAllowedPrice)}</span>
+                <span>Текущая: {formatCurrency(result?.myShopPrice)}</span>
+              </div>
+            </div>
+            <div className="sim-results">
+              <ResultRow label="Мин. допустимая цена" value={minAllowedPrice} isPrice />
+              <ResultRow label="Цена для расчёта" value={effectivePrice} isPrice />
+              <ResultRow label="Прибыль после оптимизации" value={profitProjectedCustom} isPrice />
+            </div>
+          </div>
           {growthLoading ? (
             <div className="empty">Генерируем прогноз…</div>
           ) : (
@@ -646,7 +804,7 @@ export default function App() {
               trafficGrowth={normalizedGrowth.trafficGrowth}
               conversionGrowth={normalizedGrowth.conversionGrowth}
               profitNow={profitNow}
-              profitProjected={profitProjected}
+              profitProjected={profitProjectedCustom ?? profitProjected}
             />
           )}
         </section>
