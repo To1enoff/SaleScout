@@ -26,7 +26,7 @@ jobs:
         run: npm --prefix web install
 
       - name: Build
-        run: npm --prefix web exec -- vite build
+        run: node ./web/node_modules/vite/bin/vite.js build
 
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
