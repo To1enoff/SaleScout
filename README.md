@@ -2,6 +2,8 @@
 
 Full‑stack demo for analyzing Kaspi offers, showing price position, and visual growth projections for merchants.
 
+Live demo: https://to1enoff.github.io/SaleScout/
+
 ## Features
 - Kaspi URL validation and product ID extraction
 - Internal Kaspi offers API fetch with pagination
