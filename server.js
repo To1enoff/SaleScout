@@ -117,14 +117,28 @@ app.post('/api/analyze', async (req, res) => {
   const { productUrl, myShopName, options } = req.body || {};
 
   if (!productUrl || !myShopName) {
-    return res.status(400).json({ error: 'productUrl � myShopName �����������.' });
+    return res.status(400).json({ error: 'productUrl and myShopName are required.' });
   }
 
   try {
     const result = await analyzeKaspiProduct(productUrl, myShopName, options || {});
     return res.json(result);
   } catch (err) {
-    return res.status(400).json({ error: err.message || '������ �������.' });
+    const message = err && err.message ? err.message : 'Request failed.';
+    const looksLikeProxyError = /proxy|tunnel|tunneling|502/i.test(message);
+    if (looksLikeProxyError) {
+      try {
+        const retry = await analyzeKaspiProduct(productUrl, myShopName, {
+          ...(options || {}),
+          useProxy: false,
+          allowDirectFallback: true,
+        });
+        return res.json(retry);
+      } catch (retryErr) {
+        return res.status(400).json({ error: retryErr && retryErr.message ? retryErr.message : message });
+      }
+    }
+    return res.status(400).json({ error: message });
   }
 });
 

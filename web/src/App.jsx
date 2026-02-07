@@ -51,6 +51,13 @@ function formatDelta(value) {
   return `- ${number.toLocaleString('ru-KZ')} ₸`;
 }
 
+function isValidPhone(value) {
+  if (!value) return false;
+  const digits = String(value).replace(/\D/g, '');
+  if (digits.length < 10 || digits.length > 12) return false;
+  return /^(\+?\d[\d\s()-]+)$/.test(String(value).trim());
+}
+
 function ResultRow({ label, value, isPrice = false }) {
   const display = isPrice ? formatCurrency(value) : value ?? '—';
   return (
@@ -431,8 +438,8 @@ function buildAnimatedOffers({ leaderShop, leaderPrice, myShopName, myShopPrice,
 }
 
 export default function App() {
-  const [productUrl, setProductUrl] = useState(DEFAULT_URL);
-  const [shopName, setShopName] = useState('GadgetPro');
+  const [productUrl, setProductUrl] = useState('');
+  const [shopName, setShopName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
@@ -450,6 +457,7 @@ export default function App() {
   const [customPrice, setCustomPrice] = useState('');
   const [leadName, setLeadName] = useState('');
   const [leadPhone, setLeadPhone] = useState('');
+  const [leadPhoneTouched, setLeadPhoneTouched] = useState(false);
   const [animatedOffers, setAnimatedOffers] = useState([]);
   const [movingId, setMovingId] = useState(null);
   const [animationKey, setAnimationKey] = useState(0);
@@ -540,7 +548,8 @@ export default function App() {
 
   const canProceedStep2 = Boolean(result && result.myShopPosition && result.myShopPrice && result.leaderPrice);
   const canProceedStep3 = Boolean(Number(costPrice) > 0 && Number(minMarginPct) > 0);
-  const canProceedStep5 = Boolean(leadName.trim() && leadPhone.trim());
+  const phoneValid = isValidPhone(leadPhone);
+  const canProceedStep5 = Boolean(leadName.trim() && phoneValid);
   const isTransitioning = transitionStage !== 'entered';
 
   useEffect(() => {
@@ -677,9 +686,18 @@ export default function App() {
         }),
       });
 
-      const data = await response.json();
+      const raw = await response.text();
+      let data = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch (parseErr) {
+        // ignore, will handle below
+      }
       if (!response.ok) {
-        throw new Error(data?.error || 'Ошибка запроса');
+        throw new Error(data?.error || raw || 'Ошибка запроса');
+      }
+      if (!data) {
+        throw new Error('Пустой ответ от сервера.');
       }
 
       setResult(data);
@@ -746,20 +764,19 @@ export default function App() {
               onChange={(event) => setShopName(event.target.value)}
               placeholder="GadgetPro"
             />
-            <span className="helper">Название, как указано в Kaspi (например: ELITE MOBILE)</span>
+            <span className="helper">Название, как указано в Kaspi</span>
           </label>
 
           <button className="button" type="submit" disabled={!canSubmit || loading || isTransitioning}>
             {loading ? (
               <span className="button-loading">
                 <span className="spinner" />
-                Считаем…
+                Считаю…
               </span>
             ) : (
-              'Показать моё место и сколько я теряю'
+              'Проверить'
             )}
           </button>
-          <div className="micro">Займёт ~10 секунд • Без регистрации</div>
 
           {error ? <div className="error">{error}</div> : null}
         </form>
@@ -1048,8 +1065,12 @@ export default function App() {
                   type="tel"
                   value={leadPhone}
                   onChange={(event) => setLeadPhone(event.target.value)}
+                  onBlur={() => setLeadPhoneTouched(true)}
                   placeholder="+7 777 123 45 67"
                 />
+                {leadPhoneTouched && !phoneValid ? (
+                  <span className="helper error-text">Введите корректный номер телефона.</span>
+                ) : null}
               </label>
               <button className="button" type="button" disabled={!canProceedStep5 || isTransitioning}>
                 Оставить заявку

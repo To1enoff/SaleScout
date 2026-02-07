@@ -1,8 +1,8 @@
-const { request, ProxyAgent } = require('undici');
+ï»¿const { request, ProxyAgent } = require('undici');
 
 const KASPI_HOST = 'kaspi.kz';
 const CITY_ID = '750000000';
-const LIMIT = 5;
+const LIMIT = 20;
 const ZONE_ID = ['Magnum_ZONE1'];
 const MAX_RETRIES = 3;
 const RETRY_BASE_MS = 300;
@@ -11,7 +11,7 @@ function normalizeName(value) {
   if (!value) return '';
   return String(value)
     .toLowerCase()
-    .replace(/["'«»„“”]/g, '')
+    .replace(/["'Â«Â»â€žâ€œâ€]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -47,6 +47,7 @@ function isValidProxyUrl(value) {
 }
 
 function parseProxyUrls(options = {}) {
+  if (options.useProxy === false) return [];
   const raw = [];
 
   if (Array.isArray(options.proxyUrls) && options.proxyUrls.length > 0) {
@@ -57,8 +58,12 @@ function parseProxyUrls(options = {}) {
 
   const proxies = [];
   for (const item of raw) {
-    const value = String(item).trim();
+    let value = String(item).trim();
     if (!value) continue;
+
+    if (value.startsWith('PROXY_URLS=')) {
+      value = value.replace('PROXY_URLS=', '').trim();
+    }
 
     if (isValidProxyUrl(value)) {
       proxies.push(value);
@@ -82,6 +87,8 @@ async function postOffers(productId, page, options = {}) {
   const proxyUrls = parseProxyUrls(options);
   const cityId = options.cityId || CITY_ID;
   const zoneId = Array.isArray(options.zoneId) ? options.zoneId : ZONE_ID;
+  const allowDirectFallback = options.allowDirectFallback !== false;
+  const preferDirect = options.preferDirect !== false;
 
   const url = `https://kaspi.kz/yml/offer-view/offers/${productId}`;
   const referer = `https://kaspi.kz/shop/p/${productId}/?c=${cityId}`;
@@ -96,51 +103,70 @@ async function postOffers(productId, page, options = {}) {
     zoneId,
   };
 
+  const doRequest = async (dispatcher) => {
+    const { statusCode, body } = await request(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Content-Type': 'application/json; charset=UTF-8',
+        Origin: 'https://kaspi.kz',
+        Referer: referer,
+        'User-Agent': 'Mozilla/5.0',
+        'X-Description-Enabled': 'true',
+        'X-KS-City': cityId,
+        Cookie: `kaspi.storefront.cookie.city=${cityId}`,
+      },
+      body: JSON.stringify(payload),
+      dispatcher,
+    });
+
+    const text = await body.text();
+
+    if (statusCode < 200 || statusCode >= 300) {
+      if (debug) {
+        console.error('[kaspi] status:', statusCode);
+        console.error('[kaspi] response (first 500 chars):', text.slice(0, 500));
+      }
+      throw new Error(`Kaspi API error: ${statusCode}`);
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      if (debug) {
+        console.error('[kaspi] json parse failed. response (first 500 chars):', text.slice(0, 500));
+      }
+      throw err;
+    }
+  };
+
+  if (preferDirect && proxyUrls.length > 0) {
+    try {
+      return await doRequest(undefined);
+    } catch (err) {
+      if (debug) {
+        console.error('[kaspi] direct attempt failed, trying proxy:', err.message);
+      }
+    }
+  }
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt += 1) {
     const proxyUrl = proxyUrls.length > 0 ? proxyUrls[attempt % proxyUrls.length] : null;
     const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
     try {
-      const { statusCode, body } = await request(url, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json, text/*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Content-Type': 'application/json; charset=UTF-8',
-          Origin: 'https://kaspi.kz',
-          Referer: referer,
-          'User-Agent': 'Mozilla/5.0',
-          'X-Description-Enabled': 'true',
-          'X-KS-City': cityId,
-          Cookie: `kaspi.storefront.cookie.city=${cityId}`,
-        },
-        body: JSON.stringify(payload),
-        dispatcher,
-      });
-
-      const text = await body.text();
-
-      if (statusCode < 200 || statusCode >= 300) {
-        if (debug) {
-          console.error('[kaspi] status:', statusCode);
-          console.error('[kaspi] response (first 500 chars):', text.slice(0, 500));
-        }
-        throw new Error(`Kaspi API error: ${statusCode}`);
-      }
-
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (err) {
-        if (debug) {
-          console.error('[kaspi] json parse failed. response (first 500 chars):', text.slice(0, 500));
+      return await doRequest(dispatcher);
+    } catch (err) {
+      if (attempt === MAX_RETRIES - 1) {
+        if (proxyUrl && allowDirectFallback) {
+          if (debug) {
+            console.error('[kaspi] proxy failed, retrying direct:', err.message);
+          }
+          return await doRequest(undefined);
         }
         throw err;
       }
-
-      return data;
-    } catch (err) {
-      if (attempt === MAX_RETRIES - 1) throw err;
       const backoff = RETRY_BASE_MS * Math.pow(2, attempt);
       await sleep(backoff);
     }
@@ -165,12 +191,12 @@ function debugEmptyOffers(label, data, options = {}) {
 
 async function analyzeKaspiProduct(productUrl, myShopName, options = {}) {
   if (!isKaspiUrl(productUrl)) {
-    throw new Error('Ïëàòôîðìà íå ïîääåðæèâàåòñÿ. Âñòàâüòå ññûëêó íà òîâàð Kaspi.');
+    throw new Error('ÐŸÐ»Ð°Ñ‚Ñ„Ð¾Ñ€Ð¼Ð° Ð½Ðµ Ð¿Ð¾Ð´Ð´ÐµÑ€Ð¶Ð¸Ð²Ð°ÐµÑ‚ÑÑ. Ð’ÑÑ‚Ð°Ð²ÑŒÑ‚Ðµ ÑÑÑ‹Ð»ÐºÑƒ Ð½Ð° Ñ‚Ð¾Ð²Ð°Ñ€ Kaspi.');
   }
 
   const productId = extractProductId(productUrl);
   if (!productId) {
-    throw new Error('Íå óäàëîñü èçâëå÷ü productId èç ññûëêè Kaspi.');
+    throw new Error('ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¸Ð·Ð²Ð»ÐµÑ‡ÑŒ productId Ð¸Ð· ÑÑÑ‹Ð»ÐºÐ¸ Kaspi.');
   }
 
   const normalizedTarget = normalizeName(myShopName);
@@ -212,8 +238,10 @@ async function analyzeKaspiProduct(productUrl, myShopName, options = {}) {
   let myShopPrice = null;
   let myShopPosition = null;
 
+  const maxPages = Number.isFinite(options.maxPages) ? options.maxPages : 20;
   let page = 0;
   while (true) {
+    if (page >= maxPages) break;
     const data = page === 0 ? firstPage : await postOffers(productId, page, options);
     const offers = Array.isArray(data?.offers) ? data.offers : [];
 
