@@ -51,6 +51,12 @@ function formatDelta(value) {
   return `- ${number.toLocaleString('ru-KZ')} ₸`;
 }
 
+function absNumber(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.abs(num);
+}
+
 function isValidPhone(value) {
   if (!value) return false;
   const digits = String(value).replace(/\D/g, '');
@@ -460,9 +466,9 @@ export default function App() {
   const [leadPhoneTouched, setLeadPhoneTouched] = useState(false);
   const [animatedOffers, setAnimatedOffers] = useState([]);
   const [movingId, setMovingId] = useState(null);
-  const [animationKey, setAnimationKey] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
   const phoneScreenRef = useRef(null);
+  const initialOffersRef = useRef([]);
   const animationMetaRef = useRef({ initialIndex: 0, startPrice: 0, targetPrice: 0 });
   const intervalRef = useRef(null);
   const containerRef = useRef(null);
@@ -563,26 +569,12 @@ export default function App() {
       myShopPosition: result.myShopPosition,
     });
 
-    setAnimatedOffers(initial);
-    setMovingId(initial.find((offer) => offer.highlight)?.id ?? null);
-  }, [result, shopName]);
-
-  useEffect(() => {
-    if (!result || animationKey === 0) return;
-
-    const initial = buildAnimatedOffers({
-      leaderShop: result.leaderShop,
-      leaderPrice: result.leaderPrice,
-      myShopName: shopName,
-      myShopPrice: result.myShopPrice,
-      myShopPosition: result.myShopPosition,
-    });
-
     const initialIndex = initial.findIndex((offer) => offer.highlight);
     const startPrice = initial[initialIndex]?.price ?? result.myShopPrice ?? result.leaderPrice ?? 0;
     const targetPrice = recommendedPrice ?? (result.leaderPrice ? result.leaderPrice - 1 : startPrice);
 
     animationMetaRef.current = { initialIndex, startPrice, targetPrice };
+    initialOffersRef.current = initial;
     setAnimatedOffers(initial);
     setMovingId(initial[initialIndex]?.id ?? null);
 
@@ -594,11 +586,8 @@ export default function App() {
       setAnimatedOffers((prev) => {
         const index = prev.findIndex((offer) => offer.highlight);
         if (index <= 0) {
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
-          return prev;
+          const reset = initialOffersRef.current.length > 0 ? initialOffersRef.current : prev;
+          return reset.map((offer) => ({ ...offer }));
         }
 
         const next = [...prev];
@@ -621,16 +610,7 @@ export default function App() {
         intervalRef.current = null;
       }
     };
-  }, [animationKey, result, shopName, recommendedPrice]);
-
-  useEffect(() => {
-    if (!phoneScreenRef.current) return;
-    const container = phoneScreenRef.current;
-    const element = container.querySelector('.offer-row.highlight');
-    if (!element) return;
-    const top = element.offsetTop - container.clientHeight / 2 + element.clientHeight / 2;
-    container.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
-  }, [animatedOffers]);
+  }, [result, shopName, recommendedPrice]);
 
   useEffect(() => {
     return () => {
@@ -792,114 +772,137 @@ export default function App() {
             nextLabel="Дальше"
             nextDisabled={!canProceedStep2 || isTransitioning}
           />
-          {result ? (
-            <>
-              <div className="metric-grid">
-                <MetricCard
-                  title="Позиция"
-                  value={result.myShopPosition ?? '—'}
-                  tone="warn"
-                  icon={
-                    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                      <path
-                        d="M6 3h12v3h3v4c0 3.3-2 6.2-4.9 7.3L15 21H9l-1.1-3.7C5 16.2 3 13.3 3 10V6h3V3zm-1 5v2c0 2.2 1.4 4.2 3.4 4.9l.8.3L10 18h4l.8-2.8.8-.3C17.6 14.2 19 12.2 19 10V8H5z"
-                        fill="#d97706"
-                      />
-                    </svg>
-                  }
-                />
-                <MetricCard
-                  title="Ваша цена"
-                  value={formatCurrency(result.myShopPrice)}
-                  icon={
-                    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M3 7a2 2 0 0 1 2-2h7l9 9-7 7-9-9V7z" fill="#0ea5e9" />
-                      <circle cx="8.5" cy="8.5" r="1.5" fill="#fff" />
-                    </svg>
-                  }
-                />
-                <MetricCard
-                  title="Top‑1 цена"
-                  value={formatCurrency(result.leaderPrice)}
-                  icon={
-                    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 2l3 6 6 .9-4.3 4.2 1 6-5.7-3-5.7 3 1-6L3 8.9 9 8l3-6z" fill="#ef4444" />
-                    </svg>
-                  }
-                />
-                <MetricCard
-                  title="До Top‑1"
-                  value={formatDelta(result.priceToTop1)}
-                  tone="danger"
-                  icon={
-                    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 20l-7-8h4V4h6v8h4l-7 8z" fill="#ef4444" />
-                    </svg>
-                  }
-                />
-              </div>
-              <div className="leader">Лидер сейчас: {result.leaderShop || '—'}</div>
-              <div className="insight">
-                <span className="insight-icon">
-                  <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M12 2a7 7 0 0 0-4 12.8V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3.2A7 7 0 0 0 12 2zm-2 18v-1h4v1h-4zm4.5-7.5-1.5.9V16h-2v-2.6l-1.5-.9a4 4 0 1 1 5 0z"
-                      fill="#1e40af"
+          <div className="results-layout">
+            <div className="results-left">
+              {result ? (
+                <>
+                  <div className="metric-grid">
+                    <MetricCard
+                      title="Позиция"
+                      value={result.myShopPosition ?? '—'}
+                      tone="warn"
+                      sub="Место в выдаче"
+                      icon={
+                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M6 3h12v3h3v4c0 3.3-2 6.2-4.9 7.3L15 21H9l-1.1-3.7C5 16.2 3 13.3 3 10V6h3V3zm-1 5v2c0 2.2 1.4 4.2 3.4 4.9l.8.3L10 18h4l.8-2.8.8-.3C17.6 14.2 19 12.2 19 10V8H5z"
+                            fill="#d97706"
+                          />
+                        </svg>
+                      }
                     />
-                  </svg>
-                </span>
-                Инсайт: Вы на {result.myShopPosition ?? '—'} месте. Снижение цены на{' '}
-                {formatDelta(result.priceToTop1)} может вывести вас в TOP‑1 и увеличить продажи.
-              </div>
-            </>
-          ) : (
-            <div className="empty">Нет данных. Вернитесь и запустите анализ.</div>
-          )}
+                    <MetricCard
+                      title="Ваша цена"
+                      value={formatCurrency(result.myShopPrice)}
+                      sub="Текущая цена"
+                      icon={
+                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M3 7a2 2 0 0 1 2-2h7l9 9-7 7-9-9V7z" fill="#0ea5e9" />
+                          <circle cx="8.5" cy="8.5" r="1.5" fill="#fff" />
+                        </svg>
+                      }
+                    />
+                    <MetricCard
+                      title="Top‑1 цена"
+                      value={formatCurrency(result.leaderPrice)}
+                      sub="Лучшая цена"
+                      icon={
+                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 2l3 6 6 .9-4.3 4.2 1 6-5.7-3-5.7 3 1-6L3 8.9 9 8l3-6z" fill="#ef4444" />
+                        </svg>
+                      }
+                    />
+                    <MetricCard
+                      title="До Top‑1"
+                      value={formatDelta(result.priceToTop1)}
+                      tone="danger"
+                      sub="Разница с лидером"
+                      icon={
+                        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M12 20l-7-8h4V4h6v8h4l-7 8z" fill="#ef4444" />
+                        </svg>
+                      }
+                    />
+                  </div>
+                  <div className="leader">Лидер сейчас: {result.leaderShop || '—'}</div>
+                  <div className="insight">
+                    <span className="insight-icon">
+                      <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M12 2a7 7 0 0 0-4 12.8V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3.2A7 7 0 0 0 12 2zm-2 18v-1h4v1h-4zm4.5-7.5-1.5.9V16h-2v-2.6l-1.5-.9a4 4 0 1 1 5 0z"
+                          fill="#1e40af"
+                        />
+                      </svg>
+                    </span>
+                    Инсайт: Вы на {result.myShopPosition ?? '—'} месте. Снижение цены на{' '}
+                    {formatDelta(result.priceToTop1)} может вывести вас в TOP‑1 и увеличить продажи.
+                  </div>
 
-          <div className="info-card">
-            <div
-              className="offer-block phone-single"
-              onMouseEnter={() => setAnimationKey((value) => value + 1)}
-            >
-              <div className="phone-mock">
-                <img className="phone-frame" src={phoneFrame} alt="Phone" />
-                <div className="phone-screen" ref={phoneScreenRef}>
-                  <div className="kaspi-header">
-                    <span className="kaspi-time">17:48</span>
-                    <div className="kaspi-icons">
-                      <span className="kaspi-signal" />
-                      <span className="kaspi-wifi" />
-                      <span className="kaspi-battery">64</span>
+                  <div className="next-step">
+                    <div className="next-step-text">
+                      {result.priceToTop1 !== null && result.priceToTop1 <= 0
+                        ? 'Вы уже на лучшей цене. Включите авто‑реакцию, чтобы удерживать TOP‑1.'
+                        : `Чтобы выйти в TOP‑1, снизьте цену на ${absNumber(result.priceToTop1)?.toLocaleString('ru-KZ') ?? '—'} ₸ или включите авто‑реакцию.`}
+                    </div>
+                    <div className="next-step-actions">
+                      <button className="button secondary" type="button">
+                        Показать цену для TOP‑1
+                      </button>
+                      <button className="button" type="button">
+                        Включить авто‑реакцию
+                      </button>
                     </div>
                   </div>
-                  <div className="kaspi-search">
-                    <span className="kaspi-back">‹</span>
-                    <div className="kaspi-search-input">
-                      <span className="kaspi-search-icon" />
-                      Поиск в Магазине
+                </>
+              ) : (
+                <div className="empty">Нет данных. Вернитесь и запустите анализ.</div>
+              )}
+            </div>
+
+            <div className="results-right">
+              <div className="info-card">
+                <div className="offer-block phone-single">
+                  <div className="phone-mock">
+                    <img className="phone-frame" src={phoneFrame} alt="Phone" />
+                    <div className="phone-screen" ref={phoneScreenRef}>
+                      <div className="kaspi-header">
+                        <span className="kaspi-time">17:48</span>
+                        <div className="kaspi-icons">
+                          <span className="kaspi-signal" />
+                          <span className="kaspi-wifi" />
+                          <span className="kaspi-battery">64</span>
+                        </div>
+                      </div>
+                      <div className="kaspi-search">
+                        <span className="kaspi-back">‹</span>
+                        <div className="kaspi-search-input">
+                          <span className="kaspi-search-icon" />
+                          Поиск в Магазине
+                        </div>
+                        <span className="kaspi-close">×</span>
+                      </div>
+                      <div className="kaspi-tabs">
+                        <div className="tab">Обзор</div>
+                        <div className="tab active">Продавцы</div>
+                        <div className="tab">О товаре</div>
+                        <div className="tab">Отзывы</div>
+                      </div>
+                      <div className="kaspi-banner">Бонусы при оплате Kaspi Gold. Доставка завтра.</div>
+                      <div className="kaspi-pills">
+                        <span>3 мес</span>
+                        <span>6 мес</span>
+                        <span className="active">12 мес</span>
+                        <span>24 мес</span>
+                      </div>
+                      <div className="kaspi-subtitle">Как вас видят покупатели сейчас → после</div>
+                      <div className="offer-list kaspi-list">
+                        {animatedOffers.map((offer) => (
+                          <OfferRow key={offer.id} offer={offer} isMoving={offer.id === movingId} />
+                        ))}
+                      </div>
+                      <div className="kaspi-spacer" />
                     </div>
-                    <span className="kaspi-close">×</span>
                   </div>
-                  <div className="kaspi-tabs">
-                    <div className="tab">Обзор</div>
-                    <div className="tab active">Продавцы</div>
-                    <div className="tab">О товаре</div>
-                    <div className="tab">Отзывы</div>
-                  </div>
-                  <div className="kaspi-banner">Бонусы при оплате Kaspi Gold. Доставка завтра.</div>
-                  <div className="kaspi-pills">
-                    <span>3 мес</span>
-                    <span>6 мес</span>
-                    <span className="active">12 мес</span>
-                    <span>24 мес</span>
-                  </div>
-                  <div className="kaspi-subtitle">Как вас видят покупатели сейчас → после</div>
-                  <div className="offer-list kaspi-list">
-                    {animatedOffers.map((offer) => (
-                      <OfferRow key={offer.id} offer={offer} isMoving={offer.id === movingId} />
-                    ))}
-                  </div>
-                  <div className="kaspi-spacer" />
                 </div>
               </div>
             </div>
