@@ -1,32 +1,15 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  CartesianGrid,
-} from 'recharts';
 import logo from '../assets/salescout__logo.png';
 import phoneFrame from '../assets/Phone mockup.png';
 
-const DEFAULT_URL = 'https://kaspi.kz/shop/p/apple-iphone-17-pro-max-256gb-oranzhevyi-145468241/?c=750000000';
 const TRANSITION_MS = 260;
 
-const DEFAULT_GROWTH = {
-  salesLiftPercent: 150,
-  conversionPercent: 1.8,
-  trafficOrganicPercent: 24,
-  trafficAdsPercent: 41,
-  salesTrend: [12, 16, 21, 27, 32, 36, 40],
-  conversionSeries: [32, 46, 61, 78],
-  captions: {
-    sales: '+150% продаж за 30 дней после оптимизации цены и позиции',
-    conversion: 'CR до 1.8% за счёт более привлекательного оффера',
-    traffic: 'Рост органики и рекламы после вывода в ТОП‑3',
-  },
-};
+const INTRO_OFFERS = [
+  { id: 'elite', name: 'ELITE MOBILE', price: 723500 },
+  { id: 'original', name: 'Original', price: 724200 },
+  { id: 'myshop', name: 'Ваш магазин', price: 725000 },
+  { id: 'gadget', name: 'GADGET-R', price: 725600 },
+];
 
 const COMPETITORS = [
   'Original',
@@ -45,10 +28,12 @@ function formatCurrency(value) {
   return `${number.toLocaleString('ru-KZ')} ₸`;
 }
 
-function formatDelta(value) {
+function formatDeltaSigned(value) {
   if (value === null || value === undefined || Number.isNaN(value)) return '—';
-  const number = Math.abs(Number(value));
-  return `- ${number.toLocaleString('ru-KZ')} ₸`;
+  const number = Number(value);
+  const abs = Math.abs(number);
+  const sign = number > 0 ? '-' : number < 0 ? '+' : '';
+  return `${sign} ${abs.toLocaleString('ru-KZ')} ₸`;
 }
 
 function absNumber(value) {
@@ -64,16 +49,6 @@ function isValidPhone(value) {
   return /^(\+?\d[\d\s()-]+)$/.test(String(value).trim());
 }
 
-function ResultRow({ label, value, isPrice = false }) {
-  const display = isPrice ? formatCurrency(value) : value ?? '—';
-  return (
-    <div className="row">
-      <div className="label">{label}</div>
-      <div className="value">{display}</div>
-    </div>
-  );
-}
-
 function MetricCard({ title, value, tone, sub, icon }) {
   return (
     <div className={`metric-card ${tone || ''}`}>
@@ -87,8 +62,9 @@ function MetricCard({ title, value, tone, sub, icon }) {
   );
 }
 
-function WizardProgress({ step, loading }) {
-  const steps = [1, 2, 3, 4, 5];
+function WizardProgress({ step, loading, completedSteps, onStepClick }) {
+  const steps = [1, 2, 3, 4];
+  const maxReached = Math.max(step, ...completedSteps, 1);
   const percent = ((step - 1) / (steps.length - 1)) * 100;
 
   return (
@@ -97,20 +73,31 @@ function WizardProgress({ step, loading }) {
         <div className="wizard-fill" style={{ width: `${percent}%` }} />
       </div>
       <div className="wizard-steps">
-        {steps.map((item) => (
-          <div key={item} className={`wizard-step ${item <= step ? 'active' : ''}`}>
-            <span>{item}</span>
-          </div>
-        ))}
+        {steps.map((item) => {
+          const isCompleted = completedSteps.includes(item);
+          const isActive = item === step;
+          const isDisabled = item > maxReached;
+          return (
+            <button
+              key={item}
+              type="button"
+              className={`wizard-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}`}
+              onClick={() => onStepClick(item)}
+              disabled={isDisabled}
+            >
+              <span>{isCompleted && !isActive ? '✓' : item}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function WizardLayout({ step, loading, summary, stageClass, children, toast, containerRef }) {
+function WizardLayout({ step, loading, stageClass, children, toast, containerRef, completedSteps, onStepClick }) {
   return (
     <div className="wizard">
-      <WizardProgress step={step} loading={loading} />
+      <WizardProgress step={step} loading={loading} completedSteps={completedSteps} onStepClick={onStepClick} />
       {toast ? <div className="toast">{toast}</div> : null}
       <div className="wizard-shell" ref={containerRef}>
         <div className={`wizard-stage ${stageClass}`}>{children}</div>
@@ -146,193 +133,31 @@ function StepHeader({ title, onBack, backDisabled, onNext, nextLabel, nextDisabl
   );
 }
 
-function buildDailySeries(baseDaily, growthPercent) {
-  const variance = [0, -2, 1, -1, 3, -2, 4, -1, 2, -3, 1, 0, 2, -2, 3, -1, 1, 0, 2, -2, 3, -1, 0, 2, -2, 1, 0, 2, -1, 3];
-  const afterMultiplier = 1 + growthPercent / 100;
+function buildIntroOffers(step) {
+  const base = INTRO_OFFERS.map((offer) => ({ ...offer, highlight: false, status: '' }));
+  const myIndex = 2;
 
-  return variance.map((v, index) => {
-    const before = Math.max(1, Math.round(baseDaily + v));
-    const after = Math.max(1, Math.round((baseDaily + v) * afterMultiplier));
-    return {
-      day: index + 1,
-      before,
-      after,
-    };
-  });
-}
+  if (step === 0) {
+    base[myIndex] = { ...base[myIndex], highlight: true, status: '#3' };
+    return base;
+  }
 
-function Donut({ percent, label }) {
-  const radius = 42;
-  const stroke = 10;
-  const normalized = Math.min(95, Math.max(10, percent));
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (normalized / 100) * circumference;
+  if (step === 1) {
+    base[myIndex] = { ...base[myIndex], highlight: true, price: base[myIndex].price - 1, status: '−1 ₸' };
+    return base;
+  }
 
-  return (
-    <div className="donut-card">
-      <svg width="120" height="120" viewBox="0 0 120 120" className="donut">
-        <circle
-          className="donut-bg"
-          cx="60"
-          cy="60"
-          r={radius}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        <circle
-          className="donut-fg"
-          cx="60"
-          cy="60"
-          r={radius}
-          strokeWidth={stroke}
-          fill="none"
-          style={{
-            '--donut-circ': circumference,
-            '--donut-offset': offset,
-          }}
-        />
-      </svg>
-      <div className="donut-value">{normalized}%</div>
-      <div className="donut-label">{label}</div>
-    </div>
-  );
-}
+  if (step === 2) {
+    const moved = [base[myIndex], ...base.slice(0, myIndex), ...base.slice(myIndex + 1)];
+    moved[0] = { ...moved[0], highlight: true, status: '#1' };
+    return moved;
+  }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function GrowthCharts({
-  salesNow,
-  salesProjected,
-  growth,
-  trafficGrowth,
-  conversionGrowth,
-  profitNow,
-  profitProjected,
-  showDetails,
-}) {
-  const [hovered, setHovered] = useState(null);
-  const dailyNow = Math.max(1, Math.round((salesNow || 30) / 30));
-  const dailySeries = buildDailySeries(dailyNow, growth);
-
-  const salesDiffPct = salesNow && salesProjected ? ((salesProjected - salesNow) / salesNow) * 100 : growth;
-  const profitDiffPct = profitNow && profitProjected ? ((profitProjected - profitNow) / profitNow) * 100 : growth;
-
-  const salesDiff = clamp(Math.round(salesDiffPct), 10, 200);
-  const profitDiff = clamp(Math.round(profitDiffPct), 10, 200);
-
-  const baseSalesHeight = 120;
-  const baseProfitHeight = 120;
-
-  const salesHeight = hovered === 'sales'
-    ? clamp(baseSalesHeight * (1 + salesDiff / 100), 60, 200)
-    : baseSalesHeight;
-  const profitHeight = hovered === 'profit'
-    ? clamp(baseProfitHeight * (1 + profitDiff / 100), 60, 200)
-    : baseProfitHeight;
-
-  const salesValue = hovered === 'sales' ? salesProjected ?? '—' : salesNow ?? '—';
-  const profitValue = hovered === 'profit' ? profitProjected ?? '—' : profitNow ?? '—';
-
-  return (
-    <div className="charts">
-      <div className="chart-card">
-        <div className="chart-title">Продажи в день: сейчас vs после</div>
-        <div className="chart-canvas">
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={dailySeries} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(value) => [`${value} шт.`, 'Продажи']} />
-              <Line
-                type="monotone"
-                dataKey="before"
-                name="До"
-                stroke="#cbd5f5"
-                strokeWidth={3}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="after"
-                name="После"
-                stroke="#0ea5e9"
-                strokeWidth={3}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="chart-caption">После выхода в TOP‑1 продажи вырастут примерно на 150%.</div>
-      </div>
-
-      {showDetails ? (
-        <>
-          <div className="chart-card chart-card--footer" style={{ height: 350 }}>
-            <div className="chart-title">Подробнее: рост продаж и прибыли</div>
-            <div className="bars two tall">
-              <div
-                className="bar-group"
-                onMouseEnter={() => setHovered('sales')}
-                onMouseLeave={() => setHovered(null)}
-              >
-                <div className="bar-area">
-                  <div className="bar" style={{ height: `${salesHeight}px`, width: '100px' }} />
-                </div>
-                <div className="bar-label">Рост продаж</div>
-                <div className="bar-value">{salesValue}</div>
-              </div>
-              <div
-                className="bar-group"
-                onMouseEnter={() => setHovered('profit')}
-                onMouseLeave={() => setHovered(null)}
-              >
-                <div className="bar-area">
-                  <div className="bar accent" style={{ height: `${profitHeight}px`, width: '100px' }} />
-                </div>
-                <div className="bar-label">Рост прибыли</div>
-                <div className="bar-value">{formatCurrency(profitValue)}</div>
-              </div>
-            </div>
-            <div className="chart-footer">
-              <div className="chart-caption">
-                Наведи на колонну — высота увеличится на процент разницы до/после.
-              </div>
-            </div>
-          </div>
-
-          <div className="chart-card">
-            <div className="chart-title">Подробнее: вклад каналов</div>
-            <div className="donuts">
-              <Donut percent={growth} label="Продажи" />
-              <Donut percent={trafficGrowth} label="Трафик" />
-              <Donut percent={conversionGrowth} label="Конверсия" />
-            </div>
-            <div className="chart-caption">Реалистичное распределение влияния на рост.</div>
-          </div>
-        </>
-      ) : null}
-    </div>
-  );
-}
-
-function calcSalesLift(result) {
-  if (!result?.leaderPrice || !result?.priceToTop1) return 150;
-  const ratio = Math.min(1, Math.max(0, result.priceToTop1 / result.leaderPrice));
-  return Math.max(150, Math.round(80 + ratio * 70));
-}
-
-function seedFromName(name) {
-  const text = String(name || 'shop');
-  return text.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  return base;
 }
 
 function buildOfferMeta(offer) {
-  const seed = seedFromName(offer.name);
+  const seed = String(offer.name || '').split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
   const rating = 4 + (seed % 10) / 10;
   const reviews = 20 + (seed % 180);
   const monthly = Math.round(Number(offer.price) / 24);
@@ -340,7 +165,6 @@ function buildOfferMeta(offer) {
   const shippingLines = [
     'Постамат, Пт, бесплатно',
     'Доставка, Пт, бесплатно',
-    'Express, завтра до 14:00, 995 ₸',
   ];
 
   return {
@@ -353,14 +177,7 @@ function buildOfferMeta(offer) {
 
 function StarIcon({ filled }) {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-      className="star-icon"
-    >
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
       <path
         d="M12 2.5l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.6 6.1 20.5l1.2-6.5L2.5 9.4l6.6-.9L12 2.5z"
         fill={filled ? '#16a34a' : '#d1d5db'}
@@ -382,22 +199,23 @@ function RatingStars({ rating }) {
   );
 }
 
-function OfferRow({ offer, isMoving }) {
+function OfferRow({ offer, variant }) {
   const meta = buildOfferMeta(offer);
 
   return (
-    <div className={`offer-row kaspi ${offer.highlight ? 'highlight' : ''} ${isMoving ? 'moving' : ''}`}>
+    <div className={`offer-row kaspi ${offer.highlight ? 'highlight' : ''} ${variant || ''}`}>
       <div className="offer-left">
         <div className="offer-shop">
           {offer.name}
           {offer.highlight ? <span className="badge">Ваш магазин</span> : null}
+          {offer.status ? <span className="mini-pill">{offer.status}</span> : null}
         </div>
         <div className="offer-rating">
           <RatingStars rating={Number(meta.rating)} />
           <span className="reviews">({meta.reviews} отзывов)</span>
         </div>
         <div className="offer-shipping">
-          {meta.shippingLines.slice(0, 2).map((line, lineIndex) => (
+          {meta.shippingLines.map((line, lineIndex) => (
             <div key={lineIndex} className="shipping-line">
               {line}
             </div>
@@ -454,8 +272,6 @@ export default function App() {
   const [transitionStage, setTransitionStage] = useState('entered');
   const [transitionDir, setTransitionDir] = useState('forward');
   const [toast, setToast] = useState('');
-  const [growthData, setGrowthData] = useState(DEFAULT_GROWTH);
-  const [growthLoading, setGrowthLoading] = useState(false);
   const [nextLoading, setNextLoading] = useState(false);
   const [costPrice, setCostPrice] = useState('');
   const [minMarginPct, setMinMarginPct] = useState('10');
@@ -464,18 +280,22 @@ export default function App() {
   const [leadName, setLeadName] = useState('');
   const [leadPhone, setLeadPhone] = useState('');
   const [leadPhoneTouched, setLeadPhoneTouched] = useState(false);
+  const [leadSubmitted, setLeadSubmitted] = useState(false);
+  const [leadSubmitting, setLeadSubmitting] = useState(false);
   const [animatedOffers, setAnimatedOffers] = useState([]);
   const [movingId, setMovingId] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
-  const phoneScreenRef = useRef(null);
-  const initialOffersRef = useRef([]);
-  const animationMetaRef = useRef({ initialIndex: 0, startPrice: 0, targetPrice: 0 });
-  const intervalRef = useRef(null);
+  const [introStep, setIntroStep] = useState(0);
+  const [introOffers, setIntroOffers] = useState(buildIntroOffers(0));
+  const [moneyKpi, setMoneyKpi] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState([]);
+  const [stepError, setStepError] = useState('');
   const containerRef = useRef(null);
   const transitionTimerRef = useRef(null);
   const toastTimerRef = useRef(null);
-
-  const canSubmit = useMemo(() => productUrl.trim() && shopName.trim(), [productUrl, shopName]);
+  const introTimerRef = useRef(null);
+  const animationMetaRef = useRef({ initialIndex: 0, startPrice: 0, targetPrice: 0 });
+  const intervalRef = useRef(null);
+  const initialOffersRef = useRef([]);
 
   const minAllowedPrice = useMemo(() => {
     const cost = Number(costPrice);
@@ -491,7 +311,11 @@ export default function App() {
     return Math.max(desired, minAllowedPrice);
   }, [result, minAllowedPrice]);
 
-  const salesLift = useMemo(() => calcSalesLift(result), [result]);
+  const salesLift = useMemo(() => {
+    if (!result?.leaderPrice || !result?.priceToTop1) return 150;
+    const ratio = Math.min(1, Math.max(0, result.priceToTop1 / result.leaderPrice));
+    return Math.max(150, Math.round(80 + ratio * 70));
+  }, [result]);
 
   const projectedSales = useMemo(() => {
     const base = Number(currentSales);
@@ -525,37 +349,26 @@ export default function App() {
     return Math.round(perUnit * projectedSales);
   }, [effectivePrice, costPrice, projectedSales]);
 
-  const profitDelta = useMemo(() => {
-    if (!profitNow || !profitProjectedCustom) return null;
-    return profitProjectedCustom - profitNow;
-  }, [profitNow, profitProjectedCustom]);
+  const deltaToTop1 = useMemo(() => {
+    if (!result?.myShopPrice || !result?.leaderPrice) return null;
+    return result.myShopPrice - result.leaderPrice;
+  }, [result]);
 
-  const profitDeltaPct = useMemo(() => {
-    if (!profitNow || !profitProjectedCustom) return null;
-    return Math.round(((profitProjectedCustom - profitNow) / profitNow) * 100);
-  }, [profitNow, profitProjectedCustom]);
-
-  const normalizedGrowth = useMemo(() => {
-    const base = { ...DEFAULT_GROWTH, ...growthData };
-    const lift = Math.max(150, Number(base.salesLiftPercent) || 150);
-    const traffic = Math.max(35, Math.min(85, Math.round(lift * 0.5)));
-    const conversion = Math.max(20, Math.min(65, Math.round(lift * 0.35)));
-    return {
-      ...base,
-      salesLiftPercent: lift,
-      trafficGrowth: traffic,
-      conversionGrowth: conversion,
-      captions: {
-        ...base.captions,
-        sales: `+${lift}% продаж за 30 дней после оптимизации цены и позиции`,
-      },
-    };
-  }, [growthData]);
-
-  const canProceedStep2 = Boolean(result && result.myShopPosition && result.myShopPrice && result.leaderPrice);
-  const canProceedStep3 = Boolean(Number(costPrice) > 0 && Number(minMarginPct) > 0);
   const phoneValid = isValidPhone(leadPhone);
-  const canProceedStep5 = Boolean(leadName.trim() && phoneValid);
+  const canProceedStep1 = Boolean(
+    productUrl.trim() &&
+      shopName.trim() &&
+      /kaspi\.kz/i.test(productUrl.trim())
+  );
+  const canProceedStep2 = Boolean(result && result.myShopPosition && result.myShopPrice && result.leaderPrice);
+  const canProceedStep3 = Boolean(
+    result &&
+      profitNow !== null &&
+      profitProjectedCustom !== null &&
+      currentSales &&
+      projectedSales
+  );
+  const canProceedStep4 = Boolean(leadName.trim() && phoneValid);
   const isTransitioning = transitionStage !== 'entered';
 
   useEffect(() => {
@@ -613,6 +426,53 @@ export default function App() {
   }, [result, shopName, recommendedPrice]);
 
   useEffect(() => {
+    if (!result) return;
+    if (!costPrice) {
+      const guess = result.myShopPrice ? Math.round(result.myShopPrice * 0.85) : '';
+      if (guess) setCostPrice(String(guess));
+    }
+    if (!currentSales) setCurrentSales('50');
+  }, [result, costPrice, currentSales]);
+
+  useEffect(() => {
+    if (displayStep !== 1) return;
+    if (introTimerRef.current) clearInterval(introTimerRef.current);
+
+    setIntroOffers(buildIntroOffers(0));
+    setIntroStep(0);
+
+    introTimerRef.current = setInterval(() => {
+      setIntroStep((prev) => {
+        const next = (prev + 1) % 3;
+        setIntroOffers(buildIntroOffers(next));
+        return next;
+      });
+    }, 1400);
+
+    return () => {
+      if (introTimerRef.current) clearInterval(introTimerRef.current);
+    };
+  }, [displayStep]);
+
+  useEffect(() => {
+    if (displayStep !== 3) return;
+    if (profitProjectedCustom === null || profitNow === null) return;
+
+    const target = profitProjectedCustom - profitNow;
+    const duration = 600;
+    const start = performance.now();
+
+    const tick = (time) => {
+      const progress = Math.min(1, (time - start) / duration);
+      const value = Math.round(target * progress);
+      setMoneyKpi(value);
+      if (progress < 1) requestAnimationFrame(tick);
+    };
+
+    requestAnimationFrame(tick);
+  }, [displayStep, profitProjectedCustom, profitNow]);
+
+  useEffect(() => {
     return () => {
       if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -645,12 +505,20 @@ export default function App() {
     }, TRANSITION_MS);
   };
 
+  const handleStepClick = (targetStep) => {
+    if (isTransitioning || loading || leadSubmitting) return;
+    const maxReached = Math.max(step, ...completedSteps, 1);
+    if (targetStep > maxReached) return;
+    startTransition(targetStep);
+  };
+
   async function handleAnalyze(event) {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (!canProceedStep1) return;
 
     setLoading(true);
     setError('');
+    setStepError('');
     setResult(null);
 
     try {
@@ -671,7 +539,7 @@ export default function App() {
       try {
         data = raw ? JSON.parse(raw) : null;
       } catch (parseErr) {
-        // ignore, will handle below
+        // ignore
       }
       if (!response.ok) {
         throw new Error(data?.error || raw || 'Ошибка запроса');
@@ -681,85 +549,134 @@ export default function App() {
       }
 
       setResult(data);
+      setCompletedSteps((prev) => (prev.includes(1) ? prev : [...prev, 1]));
       startTransition(2);
     } catch (err) {
-      setError(err.message || 'Ошибка запроса');
+      const message = err.message || 'Ошибка запроса';
+      setError(message);
+      setStepError('Не удалось получить данные. Попробуйте ещё раз.');
     } finally {
       setLoading(false);
     }
   }
 
-  async function loadGrowth() {
-    setGrowthLoading(true);
-    try {
-      const response = await fetch('/api/growth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(result || {}),
-      });
-      const data = await response.json();
-      setGrowthData({ ...DEFAULT_GROWTH, ...data });
-    } catch (err) {
-      setGrowthData(DEFAULT_GROWTH);
-    } finally {
-      setGrowthLoading(false);
-    }
-  }
-
   const handleNextFromStep2 = () => {
-    if (!canProceedStep2 || isTransitioning) return;
+    if (!canProceedStep2 || isTransitioning || loading) return;
+    setStepError('');
+    setCompletedSteps((prev) => (prev.includes(2) ? prev : [...prev, 2]));
     startTransition(3);
   };
 
-  const handleNextFromStep3 = async () => {
+  const handleNextFromStep3 = () => {
     if (!canProceedStep3 || isTransitioning) return;
-    setNextLoading(true);
-    await loadGrowth();
-    setNextLoading(false);
+    setStepError('');
+    setCompletedSteps((prev) => (prev.includes(3) ? prev : [...prev, 3]));
     startTransition(4);
   };
 
+  const handleLeadSubmit = async () => {
+    if (!canProceedStep4 || isTransitioning || leadSubmitting) return;
+    setLeadSubmitting(true);
+    setStepError('');
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    setLeadSubmitted(true);
+    setCompletedSteps((prev) => (prev.includes(4) ? prev : [...prev, 4]));
+    setLeadSubmitting(false);
+  };
+
   const stageClass = `${transitionStage} ${transitionDir}`;
-  const progressLoading = loading || nextLoading || isTransitioning;
+  const progressLoading = loading || nextLoading || isTransitioning || leadSubmitting;
 
   const stepContent = (
     <>
       {displayStep === 1 && (
-        <form className="card" onSubmit={handleAnalyze}>
-          <label className="field">
-            <span>Ссылка на товар Kaspi</span>
-            <input
-              type="url"
-              value={productUrl}
-              onChange={(event) => setProductUrl(event.target.value)}
-              placeholder="https://kaspi.kz/shop/p/...-145467625/"
-            />
-          </label>
+        <section className="intro">
+          <div className="intro-layout">
+            <div className="intro-copy">
+              <div className="intro-title">
+                SaleScout выводит ваш Kaspi-магазин в TOP-1 автоматически
+              </div>
+              <div className="intro-points">
+                <div className="intro-point">
+                  <span className="point-icon">⏱</span>
+                  Проверяем цены каждые 3 минуты
+                </div>
+                <div className="intro-point">
+                  <span className="point-icon">₸</span>
+                  Снижаем на 1 ₸ от конкурента
+                </div>
+                <div className="intro-point">
+                  <span className="point-icon">🛡</span>
+                  Ниже минимальной цены не опускаемся
+                </div>
+              </div>
+              {stepError ? <div className="error-banner">{stepError}</div> : null}
+              <form className="intro-form" onSubmit={handleAnalyze}>
+                <label className="field">
+                  <span>Ссылка на товар Kaspi</span>
+                  <input
+                    type="url"
+                    value={productUrl}
+                    onChange={(event) => setProductUrl(event.target.value)}
+                    placeholder="https://kaspi.kz/shop/p/...-145467625/"
+                  />
+                </label>
 
-          <label className="field">
-            <span>Название вашего магазина</span>
-            <input
-              type="text"
-              value={shopName}
-              onChange={(event) => setShopName(event.target.value)}
-              placeholder="GadgetPro"
-            />
-            <span className="helper">Название, как указано в Kaspi</span>
-          </label>
+                <label className="field">
+                  <span>Название вашего магазина</span>
+                  <input
+                    type="text"
+                    value={shopName}
+                    onChange={(event) => setShopName(event.target.value)}
+                    placeholder="GadgetPro"
+                  />
+                  <span className="helper">Название, как указано в Kaspi</span>
+                </label>
 
-          <button className="button" type="submit" disabled={!canSubmit || loading || isTransitioning}>
-            {loading ? (
-              <span className="button-loading">
-                <span className="spinner" />
-                Считаю…
-              </span>
-            ) : (
-              'Проверить'
-            )}
-          </button>
+                <button className="button" type="submit" disabled={!canProceedStep1 || loading || isTransitioning}>
+                  {loading ? (
+                    <span className="button-loading">
+                      <span className="spinner" />
+                      Считаем…
+                    </span>
+                  ) : (
+                    'Проверить мой товар'
+                  )}
+                </button>
 
-          {error ? <div className="error">{error}</div> : null}
-        </form>
+                {error ? <div className="error">{error}</div> : null}
+              </form>
+            </div>
+
+            <div className="intro-phone">
+              <div className="phone-mock">
+                <img className="phone-frame" src={phoneFrame} alt="Phone" />
+                <div className="phone-screen demo">
+                  <div className="demo-header">
+                    <span>Продавцы</span>
+                    <span className="demo-pill">Live</span>
+                  </div>
+                  <div className="offer-list kaspi-list">
+                    {introOffers.map((offer) => (
+                      <OfferRow key={offer.id} offer={offer} variant="compact" />
+                    ))}
+                  </div>
+                  <div className="demo-footnote">Авто-реакция включена</div>
+                </div>
+              </div>
+              <div className="intro-cta">
+                <button
+                  className="button"
+                  type="button"
+                  onClick={() => handleAnalyze({ preventDefault: () => {} })}
+                  disabled={loading || isTransitioning || !canProceedStep1}
+                >
+                  Проверить мой товар
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
       )}
 
       {displayStep === 2 && (
@@ -767,11 +684,12 @@ export default function App() {
           <StepHeader
             title="Результаты"
             onBack={() => startTransition(1)}
-            backDisabled={isTransitioning}
+            backDisabled={isTransitioning || loading}
             onNext={handleNextFromStep2}
             nextLabel="Дальше"
             nextDisabled={!canProceedStep2 || isTransitioning}
           />
+          {stepError ? <div className="error-banner">{stepError}</div> : null}
           <div className="results-layout">
             <div className="results-left">
               {result ? (
@@ -779,9 +697,9 @@ export default function App() {
                   <div className="metric-grid">
                     <MetricCard
                       title="Позиция"
-                      value={result.myShopPosition ?? '—'}
+                      value={result.myShopPosition ? `#${result.myShopPosition}` : '—'}
                       tone="warn"
-                      sub="Место в выдаче"
+                      sub="место в выдаче"
                       icon={
                         <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
                           <path
@@ -794,7 +712,7 @@ export default function App() {
                     <MetricCard
                       title="Ваша цена"
                       value={formatCurrency(result.myShopPrice)}
-                      sub="Текущая цена"
+                      sub="текущая цена"
                       icon={
                         <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M3 7a2 2 0 0 1 2-2h7l9 9-7 7-9-9V7z" fill="#0ea5e9" />
@@ -805,7 +723,7 @@ export default function App() {
                     <MetricCard
                       title="Top‑1 цена"
                       value={formatCurrency(result.leaderPrice)}
-                      sub="Лучшая цена"
+                      sub="лучшая цена"
                       icon={
                         <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M12 2l3 6 6 .9-4.3 4.2 1 6-5.7-3-5.7 3 1-6L3 8.9 9 8l3-6z" fill="#ef4444" />
@@ -814,9 +732,9 @@ export default function App() {
                     />
                     <MetricCard
                       title="До Top‑1"
-                      value={formatDelta(result.priceToTop1)}
-                      tone="danger"
-                      sub="Разница с лидером"
+                      value={formatDeltaSigned(deltaToTop1)}
+                      tone={deltaToTop1 > 0 ? 'danger' : deltaToTop1 < 0 ? 'success' : 'neutral'}
+                      sub="разница с лидером"
                       icon={
                         <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
                           <path d="M12 20l-7-8h4V4h6v8h4l-7 8z" fill="#ef4444" />
@@ -825,24 +743,14 @@ export default function App() {
                     />
                   </div>
                   <div className="leader">Лидер сейчас: {result.leaderShop || '—'}</div>
-                  <div className="insight">
-                    <span className="insight-icon">
-                      <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                        <path
-                          d="M12 2a7 7 0 0 0-4 12.8V18a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-3.2A7 7 0 0 0 12 2zm-2 18v-1h4v1h-4zm4.5-7.5-1.5.9V16h-2v-2.6l-1.5-.9a4 4 0 1 1 5 0z"
-                          fill="#1e40af"
-                        />
-                      </svg>
-                    </span>
-                    Инсайт: Вы на {result.myShopPosition ?? '—'} месте. Снижение цены на{' '}
-                    {formatDelta(result.priceToTop1)} может вывести вас в TOP‑1 и увеличить продажи.
-                  </div>
 
                   <div className="next-step">
                     <div className="next-step-text">
-                      {result.priceToTop1 !== null && result.priceToTop1 <= 0
+                      {deltaToTop1 !== null && deltaToTop1 === 0
                         ? 'Вы уже на лучшей цене. Включите авто‑реакцию, чтобы удерживать TOP‑1.'
-                        : `Чтобы выйти в TOP‑1, снизьте цену на ${absNumber(result.priceToTop1)?.toLocaleString('ru-KZ') ?? '—'} ₸ или включите авто‑реакцию.`}
+                        : deltaToTop1 !== null && deltaToTop1 < 0
+                          ? 'Вы уже дешевле TOP‑1. Можно поднять цену и сохранить позицию.'
+                          : `Чтобы выйти в TOP‑1, снизьте цену на ${absNumber(deltaToTop1)?.toLocaleString('ru-KZ') ?? '—'} ₸ или включите авто‑реакцию.`}
                     </div>
                     <div className="next-step-actions">
                       <button className="button secondary" type="button">
@@ -864,7 +772,7 @@ export default function App() {
                 <div className="offer-block phone-single">
                   <div className="phone-mock">
                     <img className="phone-frame" src={phoneFrame} alt="Phone" />
-                    <div className="phone-screen" ref={phoneScreenRef}>
+                    <div className="phone-screen">
                       <div className="kaspi-header">
                         <span className="kaspi-time">17:48</span>
                         <div className="kaspi-icons">
@@ -897,7 +805,7 @@ export default function App() {
                       <div className="kaspi-subtitle">Как вас видят покупатели сейчас → после</div>
                       <div className="offer-list kaspi-list">
                         {animatedOffers.map((offer) => (
-                          <OfferRow key={offer.id} offer={offer} isMoving={offer.id === movingId} />
+                          <OfferRow key={offer.id} offer={offer} />
                         ))}
                       </div>
                       <div className="kaspi-spacer" />
@@ -913,100 +821,19 @@ export default function App() {
       {displayStep === 3 && (
         <section className="results">
           <StepHeader
-            title="Симулятор прибыли"
+            title="Итог при выходе в TOP-1"
             onBack={() => startTransition(2)}
-            backDisabled={isTransitioning || nextLoading}
+            backDisabled={isTransitioning}
             onNext={handleNextFromStep3}
             nextLabel="Дальше"
-            nextDisabled={!canProceedStep3 || isTransitioning || nextLoading}
-            nextLoading={nextLoading}
+            nextDisabled={!canProceedStep3 || isTransitioning}
           />
-
-          <div className="info-card">
-            <div className="big-profit">
-              Прибыль после оптимизации
-              <div className="big-profit-value">+{formatCurrency(profitProjectedCustom)}</div>
-              {profitDelta !== null ? (
-                <div className="profit-diff">
-                  Было: {formatCurrency(profitNow)} → Стало: {formatCurrency(profitProjectedCustom)}
-                  {profitDeltaPct !== null ? ` • ↑ +${profitDeltaPct}%` : ''}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="sim-grid">
-              <label className="field">
-                <span>Себестоимость</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={costPrice}
-                  onChange={(event) => setCostPrice(event.target.value)}
-                  placeholder="Напр. 620000"
-                />
-              </label>
-              <label className="field">
-                <span>Мин. маржа, %</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={minMarginPct}
-                  onChange={(event) => setMinMarginPct(event.target.value)}
-                  placeholder="10"
-                />
-              </label>
-              <label className="field">
-                <span>Продаж в месяц</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={currentSales}
-                  onChange={(event) => setCurrentSales(event.target.value)}
-                  placeholder="50"
-                />
-              </label>
-            </div>
-
-            <div className="slider-block">
-              <div className="slider-header">
-                <span>Цена (не ниже минимальной)</span>
-                <strong>{formatCurrency(effectivePrice)}</strong>
-              </div>
-              <input
-                className="price-slider"
-                type="range"
-                min={minAllowedPrice ?? 0}
-                max={result?.leaderPrice ? result.leaderPrice - 1 : recommendedPrice ?? minAllowedPrice ?? 0}
-                value={effectivePrice ?? 0}
-                onChange={(event) => setCustomPrice(event.target.value)}
-              />
-              <div className="slider-range">
-                <span>Мин: {formatCurrency(minAllowedPrice)}</span>
-                <span>Текущая: {formatCurrency(result?.myShopPrice)}</span>
-              </div>
-            </div>
-
-            <div className="sim-results">
-              <ResultRow label="Мин. допустимая цена" value={minAllowedPrice} isPrice />
-              <ResultRow label="Цена для расчёта" value={effectivePrice} isPrice />
-              <ResultRow label="Ожидаемый рост продаж" value={`+${salesLift}%`} />
-            </div>
-          </div>
-        </section>
-      )}
-
-      {displayStep === 4 && (
-        <section className="results">
-          <StepHeader
-            title="Итог при выходе в TOP-1"
-            onBack={() => startTransition(3)}
-            backDisabled={isTransitioning}
-          />
+          {!canProceedStep3 ? (
+            <div className="error-banner">Нет данных — вернитесь на шаг 2.</div>
+          ) : null}
           <div className="final-summary">
             <div className="final-hero">
-              {profitProjectedCustom !== null && profitNow !== null
-                ? `+${formatCurrency(profitProjectedCustom - profitNow)} / месяц`
-                : '+ — / месяц'}
+              +{formatCurrency(moneyKpi)} / месяц
             </div>
             <div className="final-sales">
               {currentSales || '—'} → {projectedSales ?? '—'} продаж
@@ -1018,7 +845,7 @@ export default function App() {
             </div>
             <div className="final-line">
               <span>После</span>
-              <strong>{formatCurrency(profitProjectedCustom ?? profitProjected)}</strong>
+              <strong>{formatCurrency(profitProjectedCustom)}</strong>
             </div>
 
             <div className="final-price">
@@ -1038,48 +865,69 @@ export default function App() {
             </div>
           </div>
 
-          <button className="cta-button receipt-cta" type="button" onClick={() => startTransition(5)}>
+          <button className="cta-button receipt-cta" type="button" onClick={() => startTransition(4)}>
             Хочу такой результат
           </button>
         </section>
       )}
 
-      {displayStep === 5 && (
+      {displayStep === 4 && (
         <section className="results">
           <StepHeader
-            title="Заявка"
-            onBack={() => startTransition(4)}
-            backDisabled={isTransitioning}
+            title="Почти готово 🚀"
+            onBack={() => startTransition(3)}
+            backDisabled={isTransitioning || leadSubmitting}
           />
-          <div className="info-card">
-            <div className="lead-card">
-              <label className="field">
-                <span>Имя</span>
-                <input
-                  type="text"
-                  value={leadName}
-                  onChange={(event) => setLeadName(event.target.value)}
-                  placeholder="Например, Айдар"
-                />
-              </label>
-              <label className="field">
-                <span>Контактный номер</span>
-                <input
-                  type="tel"
-                  value={leadPhone}
-                  onChange={(event) => setLeadPhone(event.target.value)}
-                  onBlur={() => setLeadPhoneTouched(true)}
-                  placeholder="+7 777 123 45 67"
-                />
-                {leadPhoneTouched && !phoneValid ? (
-                  <span className="helper error-text">Введите корректный номер телефона.</span>
-                ) : null}
-              </label>
-              <button className="button" type="button" disabled={!canProceedStep5 || isTransitioning}>
-                Оставить заявку
-              </button>
-              <div className="micro">Менеджер свяжется с вами в ближайшее время.</div>
-            </div>
+          {stepError ? <div className="error-banner">{stepError}</div> : null}
+          <div className="lead-wrapper">
+            {!leadSubmitted ? (
+              <div className="lead-card">
+                <div className="lead-subtitle">
+                  Оставьте контакты — мы подключим SaleScout и настроим за вас (≈10 минут)
+                </div>
+                <label className="field">
+                  <span>Имя</span>
+                  <input
+                    type="text"
+                    value={leadName}
+                    onChange={(event) => setLeadName(event.target.value)}
+                    placeholder="Например, Айдар"
+                  />
+                </label>
+                <label className="field">
+                  <span>Телефон</span>
+                  <input
+                    type="tel"
+                    value={leadPhone}
+                    onChange={(event) => setLeadPhone(event.target.value)}
+                    onBlur={() => setLeadPhoneTouched(true)}
+                    placeholder="+7 (777) 123-45-67"
+                  />
+                  {leadPhoneTouched && !phoneValid ? (
+                    <span className="helper error-text">Введите корректный номер телефона.</span>
+                  ) : null}
+                </label>
+                <button className="button" type="button" disabled={!canProceedStep4 || isTransitioning || leadSubmitting} onClick={handleLeadSubmit}>
+                  {leadSubmitting ? (
+                    <span className="button-loading">
+                      <span className="spinner" />
+                      Отправляем…
+                    </span>
+                  ) : (
+                    'Запустить SaleScout'
+                  )}
+                </button>
+                <div className="micro">Без спама. Менеджер свяжется в ближайшее время.</div>
+              </div>
+            ) : (
+              <div className="lead-success">
+                <div className="success-title">Заявка отправлена ✅</div>
+                <div className="success-text">Мы напишем или позвоним в ближайшее время.</div>
+                <button className="button" type="button" onClick={() => startTransition(1)}>
+                  Новый анализ
+                </button>
+              </div>
+            )}
           </div>
         </section>
       )}
@@ -1098,6 +946,8 @@ export default function App() {
         stageClass={stageClass}
         toast={toast}
         containerRef={containerRef}
+        completedSteps={completedSteps}
+        onStepClick={handleStepClick}
       >
         {stepContent}
       </WizardLayout>
