@@ -199,11 +199,13 @@ function RatingStars({ rating }) {
   );
 }
 
-function OfferRow({ offer, variant }) {
+function OfferRow({ offer, variant, isMoving }) {
   const meta = buildOfferMeta(offer);
 
   return (
-    <div className={`offer-row kaspi ${offer.highlight ? 'highlight' : ''} ${variant || ''}`}>
+    <div
+      className={`offer-row kaspi ${offer.highlight ? 'highlight' : ''} ${isMoving ? 'moving' : ''} ${variant || ''}`}
+    >
       <div className="offer-left">
         <div className="offer-shop">
           {offer.name}
@@ -256,6 +258,7 @@ function buildAnimatedOffers({ leaderShop, leaderPrice, myShopName, myShopPrice,
     name: myShopName || 'Ваш магазин',
     price: myShopPrice || base + deltas[targetIndex],
     highlight: true,
+    status: `#${targetIndex + 1}`,
   };
 
   return offers;
@@ -278,6 +281,7 @@ export default function App() {
   const [currentSales, setCurrentSales] = useState('50');
   const [customPrice, setCustomPrice] = useState('');
   const [leadName, setLeadName] = useState('');
+  const [leadShopName, setLeadShopName] = useState('');
   const [leadPhone, setLeadPhone] = useState('');
   const [leadPhoneTouched, setLeadPhoneTouched] = useState(false);
   const [leadSubmitted, setLeadSubmitted] = useState(false);
@@ -295,6 +299,8 @@ export default function App() {
   const introTimerRef = useRef(null);
   const animationMetaRef = useRef({ initialIndex: 0, startPrice: 0, targetPrice: 0 });
   const intervalRef = useRef(null);
+  const priceAnimRef = useRef(null);
+  const pendingPriceAnimRef = useRef(null);
   const initialOffersRef = useRef([]);
 
   const minAllowedPrice = useMemo(() => {
@@ -368,7 +374,7 @@ export default function App() {
       currentSales &&
       projectedSales
   );
-  const canProceedStep4 = Boolean(leadName.trim() && phoneValid);
+  const canProceedStep4 = Boolean(leadName.trim() && leadShopName.trim() && phoneValid);
   const isTransitioning = transitionStage !== 'entered';
 
   useEffect(() => {
@@ -395,6 +401,24 @@ export default function App() {
       clearInterval(intervalRef.current);
     }
 
+    const animatePrice = (from, to, duration) => {
+      if (priceAnimRef.current) {
+        cancelAnimationFrame(priceAnimRef.current);
+      }
+      const start = performance.now();
+      const tick = (time) => {
+        const progress = Math.min(1, (time - start) / duration);
+        const value = Math.round(from + (to - from) * progress);
+        setAnimatedOffers((prev) =>
+          prev.map((offer) => (offer.highlight ? { ...offer, price: value } : offer))
+        );
+        if (progress < 1) {
+          priceAnimRef.current = requestAnimationFrame(tick);
+        }
+      };
+      priceAnimRef.current = requestAnimationFrame(tick);
+    };
+
     intervalRef.current = setInterval(() => {
       setAnimatedOffers((prev) => {
         const index = prev.findIndex((offer) => offer.highlight);
@@ -412,15 +436,27 @@ export default function App() {
         const { initialIndex: startIndex, startPrice: origin, targetPrice: target } = animationMetaRef.current;
         const progress = startIndex > 0 ? (startIndex - (index - 1)) / startIndex : 1;
         const newPrice = Math.round(origin - (origin - target) * progress);
-        next[index - 1] = { ...next[index - 1], price: newPrice };
+        pendingPriceAnimRef.current = { from: highlighted.price, to: newPrice };
+        next[index - 1] = { ...next[index - 1], price: highlighted.price, status: `#${index}` };
+        setMovingId(next[index - 1]?.id ?? null);
         return next;
       });
+
+      if (pendingPriceAnimRef.current) {
+        const { from, to } = pendingPriceAnimRef.current;
+        pendingPriceAnimRef.current = null;
+        animatePrice(from, to, 520);
+      }
     }, 650);
 
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+      }
+      if (priceAnimRef.current) {
+        cancelAnimationFrame(priceAnimRef.current);
+        priceAnimRef.current = null;
       }
     };
   }, [result, shopName, recommendedPrice]);
@@ -433,6 +469,12 @@ export default function App() {
     }
     if (!currentSales) setCurrentSales('50');
   }, [result, costPrice, currentSales]);
+
+  useEffect(() => {
+    if (!leadShopName.trim() && shopName.trim()) {
+      setLeadShopName(shopName.trim());
+    }
+  }, [shopName, leadShopName]);
 
   useEffect(() => {
     if (displayStep !== 1) return;
@@ -652,9 +694,27 @@ export default function App() {
               <div className="phone-mock">
                 <img className="phone-frame" src={phoneFrame} alt="Phone" />
                 <div className="phone-screen demo">
-                  <div className="demo-header">
-                    <span>Продавцы</span>
-                    <span className="demo-pill">Live</span>
+                  <div className="kaspi-header">
+                    <span className="kaspi-time">11:21</span>
+                    <div className="kaspi-icons">
+                      <span className="kaspi-signal" />
+                      <span className="kaspi-wifi" />
+                      <span className="kaspi-battery">64</span>
+                    </div>
+                  </div>
+                  <div className="kaspi-search">
+                    <span className="kaspi-back">‹</span>
+                    <div className="kaspi-search-input">
+                      <span className="kaspi-search-icon" />
+                      Поиск в Магазине
+                    </div>
+                    <span className="kaspi-close">×</span>
+                  </div>
+                  <div className="kaspi-tabs">
+                    <div className="tab">Обзор</div>
+                    <div className="tab active">Продавцы</div>
+                    <div className="tab">О товаре</div>
+                    <div className="tab">Оценки и отзывы</div>
                   </div>
                   <div className="offer-list kaspi-list">
                     {introOffers.map((offer) => (
@@ -663,16 +723,6 @@ export default function App() {
                   </div>
                   <div className="demo-footnote">Авто-реакция включена</div>
                 </div>
-              </div>
-              <div className="intro-cta">
-                <button
-                  className="button"
-                  type="button"
-                  onClick={() => handleAnalyze({ preventDefault: () => {} })}
-                  disabled={loading || isTransitioning || !canProceedStep1}
-                >
-                  Проверить мой товар
-                </button>
               </div>
             </div>
           </div>
@@ -805,9 +855,9 @@ export default function App() {
                       <div className="kaspi-subtitle">Как вас видят покупатели сейчас → после</div>
                       <div className="offer-list kaspi-list">
                         {animatedOffers.map((offer) => (
-                          <OfferRow key={offer.id} offer={offer} />
-                        ))}
-                      </div>
+                      <OfferRow key={offer.id} offer={offer} isMoving={offer.id === movingId} />
+                    ))}
+                  </div>
                       <div className="kaspi-spacer" />
                     </div>
                   </div>
@@ -865,7 +915,7 @@ export default function App() {
             </div>
           </div>
 
-          <button className="cta-button receipt-cta" type="button" onClick={() => startTransition(4)}>
+          <button className="button receipt-cta" type="button" onClick={() => startTransition(4)}>
             Хочу такой результат
           </button>
         </section>
@@ -895,6 +945,15 @@ export default function App() {
                   />
                 </label>
                 <label className="field">
+                  <span>Название магазина</span>
+                  <input
+                    type="text"
+                    value={leadShopName}
+                    onChange={(event) => setLeadShopName(event.target.value)}
+                    placeholder="Например, NextDevice"
+                  />
+                </label>
+                <label className="field">
                   <span>Телефон</span>
                   <input
                     type="tel"
@@ -914,7 +973,7 @@ export default function App() {
                       Отправляем…
                     </span>
                   ) : (
-                    'Запустить SaleScout'
+                    'Отправить заявку'
                   )}
                 </button>
                 <div className="micro">Без спама. Менеджер свяжется в ближайшее время.</div>
@@ -923,6 +982,12 @@ export default function App() {
               <div className="lead-success">
                 <div className="success-title">Заявка отправлена ✅</div>
                 <div className="success-text">Мы напишем или позвоним в ближайшее время.</div>
+                <div className="success-text">
+                  Контакты для связи: {leadName || '—'}, {leadPhone || '—'}.
+                </div>
+                <div className="success-text">
+                  Магазин: {leadShopName || '—'}.
+                </div>
                 <button className="button" type="button" onClick={() => startTransition(1)}>
                   Новый анализ
                 </button>
