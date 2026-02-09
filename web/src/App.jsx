@@ -5,10 +5,11 @@ import phoneFrame from '../assets/Phone mockup.png';
 const TRANSITION_MS = 260;
 
 const INTRO_OFFERS = [
-  { id: 'elite', name: 'ELITE MOBILE', price: 723500 },
-  { id: 'original', name: 'Original', price: 724200 },
-  { id: 'myshop', name: 'Ваш магазин', price: 725000 },
-  { id: 'gadget', name: 'GADGET-R', price: 725600 },
+  { id: 'shop-1', name: 'Магазин-1', price: 723500 },
+  { id: 'shop-2', name: 'Магазин-2', price: 724200 },
+  { id: 'shop-3', name: 'Магазин-3', price: 724800 },
+  { id: 'shop-4', name: 'Магазин-4', price: 724900 },
+  { id: 'my-shop', name: 'Ваш магазин', price: 725000 },
 ];
 
 const COMPETITORS = [
@@ -133,26 +134,10 @@ function StepHeader({ title, onBack, backDisabled, onNext, nextLabel, nextDisabl
   );
 }
 
-function buildIntroOffers(step) {
+function buildIntroSeedOffers() {
   const base = INTRO_OFFERS.map((offer) => ({ ...offer, highlight: false, status: '' }));
-  const myIndex = 2;
-
-  if (step === 0) {
-    base[myIndex] = { ...base[myIndex], highlight: true, status: '#3' };
-    return base;
-  }
-
-  if (step === 1) {
-    base[myIndex] = { ...base[myIndex], highlight: true, price: base[myIndex].price - 1, status: '−1 ₸' };
-    return base;
-  }
-
-  if (step === 2) {
-    const moved = [base[myIndex], ...base.slice(0, myIndex), ...base.slice(myIndex + 1)];
-    moved[0] = { ...moved[0], highlight: true, status: '#1' };
-    return moved;
-  }
-
+  const myIndex = base.length - 1;
+  base[myIndex] = { ...base[myIndex], highlight: true, status: `#${myIndex + 1}` };
   return base;
 }
 
@@ -199,12 +184,13 @@ function RatingStars({ rating }) {
   );
 }
 
-function OfferRow({ offer, variant, isMoving }) {
+const OfferRow = React.forwardRef(function OfferRow({ offer, variant }, ref) {
   const meta = buildOfferMeta(offer);
 
   return (
     <div
-      className={`offer-row kaspi ${offer.highlight ? 'highlight' : ''} ${isMoving ? 'moving' : ''} ${variant || ''}`}
+      ref={ref}
+      className={`offer-row kaspi ${offer.highlight ? 'highlight' : ''} ${variant || ''}`}
     >
       <div className="offer-left">
         <div className="offer-shop">
@@ -234,7 +220,7 @@ function OfferRow({ offer, variant, isMoving }) {
       </div>
     </div>
   );
-}
+});
 
 function buildAnimatedOffers({ leaderShop, leaderPrice, myShopName, myShopPrice, myShopPosition }) {
   const base = Number(leaderPrice || 700000);
@@ -248,9 +234,7 @@ function buildAnimatedOffers({ leaderShop, leaderPrice, myShopName, myShopPrice,
     highlight: false,
   }));
 
-  const targetIndex = myShopPosition && myShopPosition > 0 && myShopPosition <= offers.length
-    ? myShopPosition - 1
-    : offers.length - 1;
+  const targetIndex = Math.min(3, offers.length - 1);
 
   offers[targetIndex] = {
     ...offers[targetIndex],
@@ -288,8 +272,10 @@ export default function App() {
   const [leadSubmitting, setLeadSubmitting] = useState(false);
   const [animatedOffers, setAnimatedOffers] = useState([]);
   const [movingId, setMovingId] = useState(null);
-  const [introStep, setIntroStep] = useState(0);
-  const [introOffers, setIntroOffers] = useState(buildIntroOffers(0));
+  const [movingMap, setMovingMap] = useState({});
+  const [introOffers, setIntroOffers] = useState(buildIntroSeedOffers());
+  const [introMovingId, setIntroMovingId] = useState(null);
+  const [introMovingMap, setIntroMovingMap] = useState({});
   const [moneyKpi, setMoneyKpi] = useState(0);
   const [completedSteps, setCompletedSteps] = useState([]);
   const [stepError, setStepError] = useState('');
@@ -297,11 +283,16 @@ export default function App() {
   const transitionTimerRef = useRef(null);
   const toastTimerRef = useRef(null);
   const introTimerRef = useRef(null);
+  const introPriceAnimRef = useRef(null);
   const animationMetaRef = useRef({ initialIndex: 0, startPrice: 0, targetPrice: 0 });
   const intervalRef = useRef(null);
   const priceAnimRef = useRef(null);
   const pendingPriceAnimRef = useRef(null);
   const initialOffersRef = useRef([]);
+  const moveTimerRef = useRef(null);
+  const introMoveTimerRef = useRef(null);
+  const resultRowRefs = useRef(new Map());
+  const introRowRefs = useRef(new Map());
 
   const minAllowedPrice = useMemo(() => {
     const cost = Number(costPrice);
@@ -396,6 +387,7 @@ export default function App() {
     initialOffersRef.current = initial;
     setAnimatedOffers(initial);
     setMovingId(initial[initialIndex]?.id ?? null);
+    setMovingMap({});
 
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -420,6 +412,11 @@ export default function App() {
     };
 
     intervalRef.current = setInterval(() => {
+      const firstRects = new Map();
+      resultRowRefs.current.forEach((node, id) => {
+        if (node) firstRects.set(id, node.getBoundingClientRect());
+      });
+
       setAnimatedOffers((prev) => {
         const index = prev.findIndex((offer) => offer.highlight);
         if (index <= 0) {
@@ -433,21 +430,19 @@ export default function App() {
         next[index - 1] = { ...highlighted };
         next[index] = { ...swapTarget };
 
-        const { initialIndex: startIndex, startPrice: origin, targetPrice: target } = animationMetaRef.current;
-        const progress = startIndex > 0 ? (startIndex - (index - 1)) / startIndex : 1;
-        const newPrice = Math.round(origin - (origin - target) * progress);
+        const newPrice = Math.max(0, Number(swapTarget.price || 0) - 1);
         pendingPriceAnimRef.current = { from: highlighted.price, to: newPrice };
         next[index - 1] = { ...next[index - 1], price: highlighted.price, status: `#${index}` };
-        setMovingId(next[index - 1]?.id ?? null);
         return next;
       });
 
       if (pendingPriceAnimRef.current) {
         const { from, to } = pendingPriceAnimRef.current;
         pendingPriceAnimRef.current = null;
-        animatePrice(from, to, 520);
+        animatePrice(from, to, 972);
       }
-    }, 650);
+      runFlip(resultRowRefs.current, firstRects);
+    }, 1310);
 
     return () => {
       if (intervalRef.current) {
@@ -457,6 +452,10 @@ export default function App() {
       if (priceAnimRef.current) {
         cancelAnimationFrame(priceAnimRef.current);
         priceAnimRef.current = null;
+      }
+      if (moveTimerRef.current) {
+        clearTimeout(moveTimerRef.current);
+        moveTimerRef.current = null;
       }
     };
   }, [result, shopName, recommendedPrice]);
@@ -479,20 +478,64 @@ export default function App() {
   useEffect(() => {
     if (displayStep !== 1) return;
     if (introTimerRef.current) clearInterval(introTimerRef.current);
+    if (introPriceAnimRef.current) cancelAnimationFrame(introPriceAnimRef.current);
 
-    setIntroOffers(buildIntroOffers(0));
-    setIntroStep(0);
+    const seed = buildIntroSeedOffers();
+    setIntroOffers(seed);
+    setIntroMovingId(seed.find((offer) => offer.highlight)?.id ?? null);
+
+    const animateIntroPrice = (from, to, duration) => {
+      if (introPriceAnimRef.current) cancelAnimationFrame(introPriceAnimRef.current);
+      const start = performance.now();
+      const tick = (time) => {
+        const progress = Math.min(1, (time - start) / duration);
+        const value = Math.round(from + (to - from) * progress);
+        setIntroOffers((prev) =>
+          prev.map((offer) => (offer.highlight ? { ...offer, price: value } : offer))
+        );
+        if (progress < 1) {
+          introPriceAnimRef.current = requestAnimationFrame(tick);
+        }
+      };
+      introPriceAnimRef.current = requestAnimationFrame(tick);
+    };
 
     introTimerRef.current = setInterval(() => {
-      setIntroStep((prev) => {
-        const next = (prev + 1) % 3;
-        setIntroOffers(buildIntroOffers(next));
+      const firstRects = new Map();
+      introRowRefs.current.forEach((node, id) => {
+        if (node) firstRects.set(id, node.getBoundingClientRect());
+      });
+
+      setIntroOffers((prev) => {
+        const index = prev.findIndex((offer) => offer.highlight);
+        if (index <= 0) {
+          const reset = buildIntroSeedOffers();
+          setIntroMovingId(reset.find((offer) => offer.highlight)?.id ?? null);
+          setIntroMovingMap({});
+          return reset;
+        }
+
+        const next = [...prev];
+        const highlighted = next[index];
+        const swapTarget = next[index - 1];
+        next[index - 1] = { ...highlighted };
+        next[index] = { ...swapTarget };
+
+        const newPrice = Math.max(0, Number(swapTarget.price || 0) - 1);
+        next[index - 1] = { ...next[index - 1], price: highlighted.price, status: `#${index}` };
+        animateIntroPrice(highlighted.price || 0, newPrice, 972);
         return next;
       });
-    }, 1400);
+      runFlip(introRowRefs.current, firstRects);
+    }, 1310);
 
     return () => {
       if (introTimerRef.current) clearInterval(introTimerRef.current);
+      if (introPriceAnimRef.current) cancelAnimationFrame(introPriceAnimRef.current);
+      if (introMoveTimerRef.current) {
+        clearTimeout(introMoveTimerRef.current);
+        introMoveTimerRef.current = null;
+      }
     };
   }, [displayStep]);
 
@@ -718,10 +761,14 @@ export default function App() {
                   </div>
                   <div className="offer-list kaspi-list">
                     {introOffers.map((offer) => (
-                      <OfferRow key={offer.id} offer={offer} variant="compact" />
+                      <OfferRow
+                        key={offer.id}
+                        offer={offer}
+                        variant="compact"
+                        ref={setRowRef(introRowRefs.current, offer.id)}
+                      />
                     ))}
                   </div>
-                  <div className="demo-footnote">Авто-реакция включена</div>
                 </div>
               </div>
             </div>
@@ -855,9 +902,13 @@ export default function App() {
                       <div className="kaspi-subtitle">Как вас видят покупатели сейчас → после</div>
                       <div className="offer-list kaspi-list">
                         {animatedOffers.map((offer) => (
-                      <OfferRow key={offer.id} offer={offer} isMoving={offer.id === movingId} />
-                    ))}
-                  </div>
+                          <OfferRow
+                            key={offer.id}
+                            offer={offer}
+                            ref={setRowRef(resultRowRefs.current, offer.id)}
+                          />
+                        ))}
+                      </div>
                       <div className="kaspi-spacer" />
                     </div>
                   </div>
@@ -1019,3 +1070,28 @@ export default function App() {
     </div>
   );
 }
+  const setRowRef = (map, id) => (node) => {
+    if (node) {
+      map.set(id, node);
+    } else {
+      map.delete(id);
+    }
+  };
+
+  const runFlip = (map, firstRects) => {
+    requestAnimationFrame(() => {
+      map.forEach((node, id) => {
+        const first = firstRects.get(id);
+        if (!first) return;
+        const last = node.getBoundingClientRect();
+        const deltaY = first.top - last.top;
+        if (!deltaY) return;
+        node.style.transform = `translateY(${deltaY}px)`;
+        node.style.transition = 'transform 0s';
+        requestAnimationFrame(() => {
+        node.style.transition = 'transform 0.83s cubic-bezier(0.2, 0.8, 0.2, 1)';
+        node.style.transform = 'translateY(0)';
+        });
+      });
+    });
+  };

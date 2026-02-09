@@ -1,7 +1,9 @@
 ﻿@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap&subset=cyrillic');
 
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap&subset=cyrillic');
+
 :root {
-  font-family: 'Noto Sans', 'Segoe UI', 'Arial', sans-serif;
+  font-family: "Roboto", Helvetica, Arial, sans-serif;
   color: #1f2937;
   background-color: #f3f6fb;
 }
@@ -554,11 +556,15 @@ h2 {
   bottom: 30px;
   background: #ffffff;
   border-radius: 28px;
-  padding: 12px;
+  padding: 8px;
   border: 1px solid #e5e7eb;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+.phone-screen.demo {
+  padding: 6px;
 }
 
 .kaspi-header {
@@ -595,7 +601,7 @@ h2 {
   display: grid;
   grid-template-columns: 20px 1fr 20px;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-bottom: 10px;
 }
 
@@ -696,7 +702,7 @@ h2 {
 
 .kaspi-list .offer-row {
   border-radius: 0;
-  padding: 10px 6px 12px;
+  padding: 10px 2px 12px;
   background: #fff;
   border: none;
   border-bottom: 1px solid #e5e7eb;
@@ -805,7 +811,17 @@ h2 {
 }
 
 .offer-row.moving {
-  animation: moveUpSmooth 0.55s ease;
+  will-change: transform;
+}
+
+.offer-row.moving-up {
+  animation: moveUpSmooth 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
+.offer-row.moving-down {
+  animation: moveDownSmooth 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
 }
 
 .offer-price {
@@ -818,7 +834,16 @@ h2 {
 
 @keyframes moveUpSmooth {
   0% {
-    transform: translateY(8px);
+    transform: translateY(10px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes moveDownSmooth {
+  0% {
+    transform: translateY(-10px);
   }
   100% {
     transform: translateY(0);
